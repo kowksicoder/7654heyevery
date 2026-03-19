@@ -1,7 +1,13 @@
-import { BrowserRouter, Navigate, Route, Routes as RouterRoutes } from "react-router";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes as RouterRoutes
+} from "react-router";
 import ViewAccount from "@/components/Account";
 import Bookmarks from "@/components/Bookmarks";
 import Layout from "@/components/Common/Layout";
+import Create from "@/components/Create";
 import Creators from "@/components/Creators";
 import ENS from "@/components/ENS";
 import ViewGroup from "@/components/Group";
@@ -18,7 +24,6 @@ import Copyright from "@/components/Pages/Copyright";
 import Guidelines from "@/components/Pages/Guidelines";
 import Privacy from "@/components/Pages/Privacy";
 import Support from "@/components/Pages/Support";
-import Streaks from "@/components/Streaks";
 import Terms from "@/components/Pages/Terms";
 import ViewPost from "@/components/Post";
 import Search from "@/components/Search";
@@ -32,9 +37,10 @@ import { default as AccountMonetizeSettings } from "@/components/Settings/Moneti
 import { default as AccountPersonalizeSettings } from "@/components/Settings/Personalize";
 import ProSettings from "@/components/Settings/Pro";
 import SessionsSettings from "@/components/Settings/Sessions";
-import Swap from "@/components/Swap";
 import UsernameSettings from "@/components/Settings/Username";
 import Custom404 from "@/components/Shared/404";
+import Streaks from "@/components/Streaks";
+import Swap from "@/components/Swap";
 import RewardsSettings from "./components/Settings/Rewards";
 import Staff from "./components/Staff";
 
@@ -42,6 +48,7 @@ const Routes = () => {
   return (
     <BrowserRouter>
       <RouterRoutes>
+        <Route element={<Create />} path="/create" />
         <Route element={<Layout />} path="/">
           <Route element={<Home />} index />
           <Route element={<Navigate replace to="/" />} path="explore" />

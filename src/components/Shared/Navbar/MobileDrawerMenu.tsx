@@ -1,24 +1,25 @@
 import {
-  ArrowsRightLeftIcon,
   ArrowRightStartOnRectangleIcon,
+  ArrowsRightLeftIcon,
   BellIcon,
   BoltIcon,
   Cog6ToothIcon,
   FlagIcon,
   InformationCircleIcon,
+  PlusCircleIcon,
   SparklesIcon,
   TrophyIcon,
   UserCircleIcon,
   UserGroupIcon
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router";
+import evLogo from "@/assets/fonts/evlogo.jpg";
 import { useSignupStore } from "@/components/Shared/Auth/Signup";
 import { Button, Image } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
-import evLogo from "@/assets/fonts/evlogo.jpg";
 import getAccount from "@/helpers/getAccount";
-import useHasNewNotifications from "@/hooks/useHasNewNotifications";
 import reloadAllTabs from "@/helpers/reloadAllTabs";
+import useHasNewNotifications from "@/hooks/useHasNewNotifications";
 import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
 import { useMobileDrawerModalStore } from "@/store/non-persisted/modal/useMobileDrawerModalStore";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
@@ -66,6 +67,11 @@ const MobileDrawerMenu = () => {
       path: "/notifications"
     },
     {
+      icon: <PlusCircleIcon className="size-4.5" />,
+      label: "Create",
+      path: "/create"
+    },
+    {
       badge: "NEW",
       icon: <SparklesIcon className="size-4.5" />,
       label: "Creators",
@@ -105,6 +111,11 @@ const MobileDrawerMenu = () => {
       path: "/groups"
     },
     {
+      icon: <PlusCircleIcon className="size-4.5" />,
+      label: "Create",
+      path: "/create"
+    },
+    {
       badge: "NEW",
       icon: <SparklesIcon className="size-4.5" />,
       label: "Creators",
@@ -132,7 +143,9 @@ const MobileDrawerMenu = () => {
     }
   ];
 
-  const primaryItems = currentAccount ? loggedInPrimaryItems : loggedOutPrimaryItems;
+  const primaryItems = currentAccount
+    ? loggedInPrimaryItems
+    : loggedOutPrimaryItems;
 
   return (
     <div
@@ -143,7 +156,7 @@ const MobileDrawerMenu = () => {
         className="max-h-[calc(100dvh-4rem)] w-[17.5rem] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-[1.35rem] bg-white p-2 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.32)] dark:bg-gray-950 dark:shadow-none"
         onClick={(event) => event.stopPropagation()}
       >
-        {!currentAccount ? (
+        {currentAccount ? null : (
           <div className="space-y-2 px-2 pb-2">
             <div className="flex items-center gap-2.5">
               <Image
@@ -154,7 +167,7 @@ const MobileDrawerMenu = () => {
                 width={32}
               />
               <div className="space-y-0.5">
-                <p className="text-sm font-semibold text-gray-950 dark:text-gray-50">
+                <p className="font-semibold text-gray-950 text-sm dark:text-gray-50">
                   Every1
                 </p>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
@@ -188,7 +201,7 @@ const MobileDrawerMenu = () => {
               </Button>
             </div>
           </div>
-        ) : null}
+        )}
 
         <div className="space-y-0.5">
           {primaryItems.map(({ badge, icon, label, path }) => {
@@ -207,13 +220,15 @@ const MobileDrawerMenu = () => {
                 to={path}
               >
                 <span className="flex items-center gap-3">
-                  <span className="text-gray-700 dark:text-gray-300">{icon}</span>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    {icon}
+                  </span>
                   <span>{label}</span>
                 </span>
                 {badge ? (
                   <span
                     className={cn(
-                      "min-w-6 rounded-lg px-2 py-0.5 text-center text-[10px] font-semibold leading-4",
+                      "min-w-6 rounded-lg px-2 py-0.5 text-center font-semibold text-[10px] leading-4",
                       label === "Notifications"
                         ? "bg-pink-500 text-white"
                         : "bg-fuchsia-200 text-fuchsia-900"

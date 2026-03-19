@@ -1,11 +1,13 @@
 import {
   MapIcon as CompassOutline,
+  PlusCircleIcon as CreateOutline,
   StarIcon as CreatorsOutline,
   MagnifyingGlassIcon,
   ArrowsRightLeftIcon as SwapOutline
 } from "@heroicons/react/24/outline";
 import {
   MapIcon as CompassSolid,
+  PlusCircleIcon as CreateSolid,
   StarIcon as CreatorsSolid,
   ArrowsRightLeftIcon as SwapSolid
 } from "@heroicons/react/24/solid";
@@ -71,6 +73,12 @@ const BottomNavigation = () => {
       outline: <MagnifyingGlassIcon className="size-6" />,
       path: "/search",
       solid: <MagnifyingGlassIcon className="size-6" />
+    },
+    {
+      label: "Create",
+      outline: <CreateOutline className="size-6" />,
+      path: "/create",
+      solid: <CreateSolid className="size-6" />
     },
     {
       label: "Swap",

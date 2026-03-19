@@ -1,41 +1,50 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Card, Image } from "@/components/Shared/UI";
 import getAvatar from "@/helpers//getAvatar";
-import { usePostStore } from "@/store/non-persisted/post/usePostStore";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import NewPublication from "./NewPublication";
 
 interface NewPostProps {
   feed?: string;
 }
 
 const NewPost = ({ feed }: NewPostProps) => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const text = searchParams.get("text");
   const url = searchParams.get("url");
   const via = searchParams.get("via");
 
   const { currentAccount } = useAccountStore();
-  const { setPostContent } = usePostStore();
-  const [showComposer, setShowComposer] = useState(false);
+
+  const createSearch = useMemo(() => {
+    const params = new URLSearchParams();
+
+    if (text) {
+      params.set("text", text);
+    }
+
+    if (url) {
+      params.set("url", url);
+    }
+
+    if (via) {
+      params.set("via", via);
+    }
+
+    if (feed) {
+      params.set("feed", feed);
+    }
+
+    const nextSearch = params.toString();
+
+    return nextSearch ? `?${nextSearch}` : "";
+  }, [feed, text, url, via]);
 
   const handleOpenComposer = () => {
     umami.track("open_composer");
-    setShowComposer(true);
+    navigate(`/create${createSearch}`);
   };
-
-  useEffect(() => {
-    if (text) {
-      const content = `${text}${url ? `\n\n${url}` : ""}${via ? `\n\nvia @${via}` : ""}`;
-      handleOpenComposer();
-      setPostContent(content);
-    }
-  }, [text, url, via]);
-
-  if (showComposer) {
-    return <NewPublication feed={feed} />;
-  }
 
   return (
     <Card

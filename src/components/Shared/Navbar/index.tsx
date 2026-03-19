@@ -3,6 +3,7 @@ import {
   BellIcon as BellOutline,
   BookmarkIcon as BookmarkOutline,
   MapIcon as CompassOutline,
+  PlusCircleIcon as CreateOutline,
   StarIcon as CreatorsOutline,
   TrophyIcon as LeaderboardOutline,
   FlagIcon as MissionsOutline,
@@ -14,6 +15,7 @@ import {
   BellIcon as BellSolid,
   BookmarkIcon as BookmarkSolid,
   MapIcon as CompassSolid,
+  PlusCircleIcon as CreateSolid,
   StarIcon as CreatorsSolid,
   TrophyIcon as LeaderboardSolid,
   FlagIcon as MissionsSolid,
@@ -55,6 +57,11 @@ const navigationItems = {
     refreshDocs: [PostBookmarksDocument],
     solid: <BookmarkSolid className="size-6" />,
     title: "Bookmarks"
+  },
+  "/create": {
+    outline: <CreateOutline className="size-6" />,
+    solid: <CreateSolid className="size-6" />,
+    title: "Create"
   },
   "/creators": {
     outline: <CreatorsOutline className="size-6" />,
@@ -117,6 +124,7 @@ const NavItems = memo(({ isLoggedIn }: { isLoggedIn: boolean }) => {
   const [refreshingRoute, setRefreshingRoute] = useState<string | null>(null);
   const routes = [
     "/",
+    "/create",
     "/creators",
     "/leaderboard",
     "/swap",
