@@ -1,7 +1,7 @@
 import parseJwt from "@/helpers//parseJwt";
 import apolloClient from "@/indexer/apollo/client";
 import { RefreshDocument, type RefreshMutation } from "@/indexer/generated";
-import { signIn, signOut } from "@/store/persisted/useAuthStore";
+import { clearAuthTokens, signIn } from "@/store/persisted/useAuthStore";
 import type { JwtPayload } from "@/types/jwt";
 
 let refreshPromise: Promise<string> | null = null;
@@ -38,7 +38,7 @@ const executeTokenRefresh = async (refreshToken: string): Promise<string> => {
       }
 
       if (refreshResult.__typename === "ForbiddenError") {
-        signOut();
+        clearAuthTokens();
         throw new Error("Refresh token is invalid or expired");
       }
 

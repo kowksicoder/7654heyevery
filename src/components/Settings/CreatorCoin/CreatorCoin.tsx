@@ -6,7 +6,7 @@ import {
   getProfileCoins,
   setApiKey
 } from "@zoralabs/coins-sdk";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { base } from "viem/chains";
 import { z } from "zod";
@@ -28,10 +28,8 @@ import prepareAccountMetadata from "@/helpers/prepareAccountMetadata";
 import uploadMetadata from "@/helpers/uploadMetadata";
 import useTransactionLifecycle from "@/hooks/useTransactionLifecycle";
 import useWaitForTransactionToComplete from "@/hooks/useWaitForTransactionToComplete";
-import {
-  useMeLazyQuery,
-  useSetAccountMetadataMutation
-} from "@/indexer/generated";
+import type { AccountFragment } from "@/indexer/generated";
+import { useSetAccountMetadataMutation } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import type { ApolloClientError } from "@/types/errors";
 
@@ -47,16 +45,16 @@ const ValidationSchema = z.object({
 const CreatorCoin = () => {
   const { currentAccount, setCurrentAccount } = useAccountStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pendingAccountRef = useRef<AccountFragment | null>(null);
   const handleTransactionLifecycle = useTransactionLifecycle();
   const waitForTransactionToComplete = useWaitForTransactionToComplete();
-  const [getCurrentAccountDetails] = useMeLazyQuery({
-    fetchPolicy: "no-cache"
-  });
 
   const onCompleted = async (hash: string) => {
     await waitForTransactionToComplete(hash);
-    const accountData = await getCurrentAccountDetails();
-    setCurrentAccount(accountData?.data?.me.loggedInAs.account);
+    if (pendingAccountRef.current) {
+      setCurrentAccount(pendingAccountRef.current);
+      pendingAccountRef.current = null;
+    }
     setIsSubmitting(false);
     toast.success("Creator coin address updated");
   };
@@ -129,6 +127,13 @@ const CreatorCoin = () => {
     const preparedAccountMetadata = prepareAccountMetadata(currentAccount, {
       attributes: { creatorCoinAddress: data.creatorCoinAddress }
     });
+    pendingAccountRef.current = {
+      ...currentAccount,
+      metadata: {
+        ...currentAccount.metadata,
+        ...preparedAccountMetadata
+      }
+    } as AccountFragment;
 
     const metadataUri = await uploadMetadata(
       accountMetadata(preparedAccountMetadata)
@@ -147,6 +152,13 @@ const CreatorCoin = () => {
     const preparedAccountMetadata = prepareAccountMetadata(currentAccount, {
       attributes: { creatorCoinAddress: undefined }
     });
+    pendingAccountRef.current = {
+      ...currentAccount,
+      metadata: {
+        ...currentAccount.metadata,
+        ...preparedAccountMetadata
+      }
+    } as AccountFragment;
 
     const metadataUri = await uploadMetadata(
       accountMetadata(preparedAccountMetadata)

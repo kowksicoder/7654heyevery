@@ -1,3 +1,16 @@
+export type Every1VerificationStatus =
+  | "flagged"
+  | "pending"
+  | "rejected"
+  | "unverified"
+  | "verified";
+
+export type Every1VerificationProofStatus =
+  | "failed"
+  | "not_started"
+  | "submitted"
+  | "verified";
+
 export interface Every1Profile {
   id: string;
   username: null | string;
@@ -10,6 +23,335 @@ export interface Every1Profile {
   zoraHandle: null | string;
   referralCode: null | string;
   e1xpTotal: number;
+  verificationStatus: Every1VerificationStatus;
+  verificationCategory: null | string;
+  verifiedAt: null | string;
+}
+
+export interface Every1ProfileVerificationRequest {
+  id: string;
+  provider: "instagram" | "other" | "tiktok" | "x" | "youtube";
+  claimedHandle: string;
+  verificationCode: string;
+  category: null | string;
+  note: null | string;
+  adminNote: null | string;
+  status: Every1VerificationStatus;
+  proofStatus: Every1VerificationProofStatus;
+  proofPostUrl: null | string;
+  proofPostId: null | string;
+  proofPostedText: null | string;
+  proofHandle: null | string;
+  proofError: null | string;
+  proofCheckedAt: null | string;
+  proofVerifiedAt: null | string;
+  createdAt: string;
+  reviewedAt: null | string;
+}
+
+export interface Every1VerificationRequestResult
+  extends Every1ProfileVerificationRequest {}
+
+export interface Every1ProfileSocialAccount {
+  id: string;
+  provider: "instagram" | "other" | "tiktok" | "x" | "youtube";
+  providerUserId: null | string;
+  handle: string;
+  displayName: null | string;
+  profileUrl: null | string;
+  avatarUrl: null | string;
+  isPrimary: boolean;
+  isVerified: boolean;
+  linkedAt: string;
+  lastVerifiedAt: null | string;
+  createdAt: string;
+}
+
+export interface Every1VerificationProofResult {
+  id: string;
+  status: Every1VerificationStatus;
+  proofStatus: Every1VerificationProofStatus;
+  proofPostUrl: null | string;
+  proofPostId: null | string;
+  proofPostedText: null | string;
+  proofHandle: null | string;
+  proofError: null | string;
+  proofCheckedAt: null | string;
+  proofVerifiedAt: null | string;
+  notificationId: null | string;
+}
+
+export interface Every1FollowStats {
+  profileId: null | string;
+  followers: number;
+  following: number;
+}
+
+export interface Every1FollowRelationship {
+  isFollowedByMe: boolean;
+  isFollowingMe: boolean;
+}
+
+export interface Every1FollowListProfile {
+  id: string;
+  username: null | string;
+  displayName: null | string;
+  bio: null | string;
+  avatarUrl: null | string;
+  bannerUrl: null | string;
+  walletAddress: null | string;
+  lensAccountAddress: null | string;
+  zoraHandle: null | string;
+  followedAt: string;
+}
+
+export interface Every1FollowMutationResult {
+  created?: boolean;
+  deleted?: boolean;
+  following: boolean;
+  notificationId?: null | string;
+  reason?: null | string;
+  targetProfileId?: null | string;
+}
+
+export interface Every1CommunitySummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: null | string;
+  avatarUrl: null | string;
+  bannerUrl: null | string;
+  visibility: "private" | "public";
+  status: "active" | "archived" | "draft";
+  ownerId: string;
+  ownerDisplayName: null | string;
+  ownerUsername: null | string;
+  ownerAvatarUrl: null | string;
+  memberCount: number;
+  postCount: number;
+  membershipRole: null | "member" | "moderator" | "owner";
+  membershipStatus:
+    | null
+    | "active"
+    | "blocked"
+    | "invited"
+    | "left"
+    | "rejected"
+    | "removed"
+    | "requested";
+  isMember: boolean;
+  isOwner: boolean;
+  joinedAt: null | string;
+  verificationStatus: Every1VerificationStatus;
+  verificationKind: null | "community_led" | "official";
+  verifiedAt: null | string;
+}
+
+export interface Every1CommunityMember {
+  id: string;
+  username: null | string;
+  displayName: null | string;
+  avatarUrl: null | string;
+  walletAddress: null | string;
+  role: "member" | "moderator" | "owner";
+  joinedAt: null | string;
+}
+
+export interface Every1CommunityDetails extends Every1CommunitySummary {
+  membersPreview: Every1CommunityMember[];
+}
+
+export interface Every1CommunityVerificationContext {
+  requestId: string;
+  communityId: string;
+  requestedByProfileId: string;
+  requestedByDisplayName: null | string;
+  requestedByUsername: null | string;
+  verificationKind: "community_led" | "official";
+  verificationCode: string;
+  category: null | string;
+  groupPlatform: null | "other" | "telegram" | "whatsapp";
+  groupUrl: null | string;
+  note: null | string;
+  adminNote: null | string;
+  status: Every1VerificationStatus;
+  requiredAdminCount: number;
+  confirmedAdminCount: number;
+  pendingAdminCount: number;
+  createdAt: string;
+  reviewedAt: null | string;
+  viewerIsRequester: boolean;
+  viewerCanConfirm: boolean;
+  viewerConfirmed: boolean;
+}
+
+export interface Every1CommunityVerificationConfirmation {
+  id: string;
+  profileId: string;
+  username: null | string;
+  displayName: null | string;
+  avatarUrl: null | string;
+  walletAddress: null | string;
+  invitedIdentifier: null | string;
+  roleLabel: null | string;
+  status: "confirmed" | "pending";
+  confirmedAt: null | string;
+  createdAt: string;
+}
+
+export interface Every1CommunityVerificationRequestResult {
+  id: string;
+  communityId: string;
+  verificationKind: "community_led" | "official";
+  verificationCode: string;
+  category: null | string;
+  groupPlatform: null | "other" | "telegram" | "whatsapp";
+  groupUrl: null | string;
+  note: null | string;
+  status: Every1VerificationStatus;
+  requiredAdminCount: number;
+  confirmedAdminCount: number;
+  createdAt: string;
+}
+
+export interface Every1CommunityVerificationConfirmationResult {
+  confirmed: boolean;
+  requestId: string;
+  communityId: string;
+  confirmedAdminCount: number;
+  requiredAdminCount: number;
+  reason: null | string;
+}
+
+export interface Every1VerifiedCommunityLink {
+  walletAddress: string;
+  communityId: string;
+  communitySlug: string;
+  communityName: string;
+  communityAvatarUrl: null | string;
+  verifiedAt: null | string;
+}
+
+export interface Every1CommunityMutationResult {
+  communityId: null | string;
+  created?: boolean;
+  isMember?: boolean;
+  left?: boolean;
+  name?: null | string;
+  notificationId?: null | string;
+  postId?: null | string;
+  reason?: null | string;
+  slug?: null | string;
+  status?: null | string;
+  visibility?: null | string;
+}
+
+export interface Every1CommunityPost {
+  id: string;
+  communityId: string;
+  authorProfileId: string;
+  authorUsername: null | string;
+  authorDisplayName: null | string;
+  authorAvatarUrl: null | string;
+  body: string;
+  mediaUrl: null | string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Every1CommunityChatMessage {
+  id: string;
+  communityId: string;
+  authorProfileId: string;
+  authorUsername: null | string;
+  authorDisplayName: null | string;
+  authorAvatarUrl: null | string;
+  body: string;
+  createdAt: string;
+}
+
+export interface Every1CommunityChatMutationResult {
+  communityId?: null | string;
+  created: boolean;
+  messageId?: null | string;
+  reason?: null | string;
+}
+
+export interface Every1CoinChatMessage {
+  id: string;
+  coinAddress: string;
+  authorProfileId: string;
+  authorUsername: null | string;
+  authorDisplayName: null | string;
+  authorAvatarUrl: null | string;
+  body: string;
+  createdAt: string;
+}
+
+export interface Every1CoinChatMutationResult {
+  coinAddress?: null | string;
+  created: boolean;
+  messageId?: null | string;
+  reason?: null | string;
+}
+
+export interface Every1EngagementNudgeSignals {
+  activeCreatorOfWeek: null | {
+    campaignId: string;
+    category: null | string;
+    creatorEarningsUsd: number;
+    displayName: null | string;
+    featuredPriceUsd: number;
+    profileId: string;
+    username: null | string;
+    walletAddress: null | string;
+  };
+  activeMissionCount: number;
+  cooldownUntil: null | string;
+  latestLeaderboardUpdate: null | {
+    body: null | string;
+    id: string;
+    targetKey: null | string;
+    title: string;
+  };
+  latestMission: null | {
+    id: string;
+    rewardE1xp: number;
+    slug: string;
+    title: string;
+  };
+  missionWinners24h: number;
+  newDropsCount: number;
+  topPerkMission: null | {
+    id: string;
+    rewardE1xp: number;
+    slug: string;
+    title: string;
+  };
+}
+
+export interface Every1EngagementNudgeResult {
+  body: null | string;
+  created: boolean;
+  createdAt: null | string;
+  data: Record<string, unknown>;
+  id: null | string;
+  kind: null | "nudge";
+  reason: null | string;
+  targetKey: null | string;
+  title: null | string;
+}
+
+export interface Every1ActivePopupCampaign {
+  id: string;
+  title: string;
+  body: string;
+  bannerUrl: null | string;
+  eventTag: null | string;
+  ctaLabel: null | string;
+  ctaUrl: null | string;
+  priority: number;
+  triggeredAt: null | string;
 }
 
 export interface ReferralDashboardProfile {
@@ -204,6 +546,8 @@ export interface Every1Notification {
   id: string;
   kind:
     | "comment"
+    | "community"
+    | "follow"
     | "like"
     | "mission"
     | "payment"
@@ -211,8 +555,11 @@ export interface Every1Notification {
     | "reward"
     | "share"
     | "streak"
+    | "nudge"
     | "system"
-    | "toast";
+    | "toast"
+    | "verification"
+    | "welcome";
   title: string;
   body: null | string;
   isRead: boolean;

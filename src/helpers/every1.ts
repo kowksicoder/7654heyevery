@@ -5,12 +5,33 @@ import type { AccountFragment } from "@/indexer/generated";
 import type {
   DailyStreakClaimResult,
   DailyStreakDashboard,
+  Every1ActivePopupCampaign,
+  Every1CoinChatMessage,
+  Every1CoinChatMutationResult,
+  Every1CommunityDetails,
+  Every1CommunityMember,
+  Every1CommunityMutationResult,
+  Every1CommunityPost,
+  Every1CommunitySummary,
+  Every1CommunityVerificationConfirmation,
+  Every1CommunityVerificationConfirmationResult,
+  Every1CommunityVerificationContext,
+  Every1CommunityVerificationRequestResult,
+  Every1EngagementNudgeResult,
+  Every1EngagementNudgeSignals,
+  Every1FollowListProfile,
+  Every1FollowMutationResult,
+  Every1FollowRelationship,
+  Every1FollowStats,
   Every1Mission,
   Every1MobileNavBadgeCounts,
   Every1MobileNavBadgeKey,
   Every1MobileNavBadgeSeenResult,
   Every1Notification,
   Every1Profile,
+  Every1ProfileSocialAccount,
+  Every1ProfileVerificationRequest,
+  Every1VerificationProofResult,
   MissionClaimResult,
   ReferralDashboard,
   ReferralJoinResult,
@@ -26,6 +47,178 @@ export const EVERY1_DAILY_STREAK_DASHBOARD_QUERY_KEY =
 export const EVERY1_MISSIONS_QUERY_KEY = "every1-missions";
 export const EVERY1_MOBILE_NAV_BADGE_COUNTS_QUERY_KEY =
   "every1-mobile-nav-badge-counts";
+export const EVERY1_PROFILE_SOCIAL_ACCOUNTS_QUERY_KEY =
+  "every1-profile-social-accounts";
+export const EVERY1_PROFILE_VERIFICATION_REQUESTS_QUERY_KEY =
+  "every1-profile-verification-requests";
+export const EVERY1_FOLLOW_STATS_QUERY_KEY = "every1-follow-stats";
+export const EVERY1_FOLLOW_RELATIONSHIP_QUERY_KEY =
+  "every1-follow-relationship";
+export const EVERY1_FOLLOW_LIST_QUERY_KEY = "every1-follow-list";
+export const EVERY1_COMMUNITIES_QUERY_KEY = "every1-communities";
+export const EVERY1_COMMUNITY_QUERY_KEY = "every1-community";
+export const EVERY1_COMMUNITY_FEED_QUERY_KEY = "every1-community-feed";
+export const EVERY1_COMMUNITY_VERIFICATION_QUERY_KEY =
+  "every1-community-verification";
+export const EVERY1_COMMUNITY_VERIFICATION_CONFIRMATIONS_QUERY_KEY =
+  "every1-community-verification-confirmations";
+export const EVERY1_ENGAGEMENT_NUDGE_SIGNALS_QUERY_KEY =
+  "every1-engagement-nudge-signals";
+export const EVERY1_ACTIVE_EVENT_POPUP_QUERY_KEY = "every1-active-event-popup";
+export const EVERY1_COIN_CHAT_QUERY_KEY = "every1-coin-chat";
+
+const PUBLIC_PROFILE_SELECT =
+  "id, username, display_name, bio, avatar_url, banner_url, wallet_address, lens_account_address, zora_handle, verification_status, verification_category, verified_at";
+
+type PublicProfileRow = {
+  avatar_url: null | string;
+  banner_url: null | string;
+  bio: null | string;
+  display_name: null | string;
+  id: string;
+  lens_account_address: null | string;
+  username: null | string;
+  verification_category: null | string;
+  verification_status: Every1Profile["verificationStatus"];
+  verified_at: null | string;
+  wallet_address: null | string;
+  zora_handle: null | string;
+};
+
+type CommunityRow = {
+  avatar_url: null | string;
+  banner_url: null | string;
+  description: null | string;
+  id: string;
+  is_member: boolean;
+  is_owner: boolean;
+  joined_at: null | string;
+  member_count: number | string;
+  membership_role: Every1CommunitySummary["membershipRole"];
+  membership_status: Every1CommunitySummary["membershipStatus"];
+  name: string;
+  owner_avatar_url: null | string;
+  owner_display_name: null | string;
+  owner_id: string;
+  owner_username: null | string;
+  post_count: number | string;
+  slug: string;
+  status: Every1CommunitySummary["status"];
+  verification_kind: Every1CommunitySummary["verificationKind"];
+  verification_status: Every1CommunitySummary["verificationStatus"];
+  verified_at: null | string;
+  visibility: Every1CommunitySummary["visibility"];
+};
+
+type CommunityMemberRow = {
+  avatar_url: null | string;
+  display_name: null | string;
+  id: string;
+  joined_at: null | string;
+  role: Every1CommunityMember["role"];
+  username: null | string;
+  wallet_address: null | string;
+};
+
+type NotificationRow = {
+  actor_avatar_url: null | string;
+  actor_display_name: null | string;
+  actor_id: null | string;
+  actor_username: null | string;
+  body: null | string;
+  created_at: string;
+  data: Record<string, unknown>;
+  id: string;
+  is_read: boolean;
+  kind: Every1Notification["kind"];
+  target_key: null | string;
+  title: string;
+};
+
+type FollowListRow = {
+  avatar_url: null | string;
+  banner_url: null | string;
+  bio: null | string;
+  display_name: null | string;
+  followed_at: string;
+  id: string;
+  lens_account_address: null | string;
+  username: null | string;
+  wallet_address: null | string;
+  zora_handle: null | string;
+};
+
+type CommunityPostRow = {
+  author_avatar_url: null | string;
+  author_display_name: null | string;
+  author_profile_id: string;
+  author_username: null | string;
+  body: string;
+  community_id: string;
+  created_at: string;
+  id: string;
+  media_url: null | string;
+  updated_at: string;
+};
+
+type SocialAccountRow = {
+  avatar_url: null | string;
+  created_at: string;
+  display_name: null | string;
+  handle: string;
+  id: string;
+  is_primary: boolean;
+  is_verified: boolean;
+  last_verified_at: null | string;
+  linked_at: string;
+  profile_url: null | string;
+  provider: Every1ProfileSocialAccount["provider"];
+  provider_user_id: null | string;
+};
+
+type VerificationRequestRow = {
+  admin_note: null | string;
+  category: null | string;
+  claimed_handle: string;
+  created_at: string;
+  id: string;
+  note: null | string;
+  proof_checked_at: null | string;
+  proof_error: null | string;
+  proof_handle: null | string;
+  proof_post_id: null | string;
+  proof_post_url: null | string;
+  proof_posted_text: null | string;
+  proof_status: Every1ProfileVerificationRequest["proofStatus"];
+  proof_verified_at: null | string;
+  provider: Every1ProfileVerificationRequest["provider"];
+  reviewed_at: null | string;
+  status: Every1ProfileVerificationRequest["status"];
+  verification_code: string;
+};
+
+type CoinChatMessageRow = {
+  author_avatar_url: null | string;
+  author_display_name: null | string;
+  author_profile_id: string;
+  author_username: null | string;
+  body: string;
+  coin_address: string;
+  created_at: string;
+  id: string;
+};
+
+type PopupCampaignRow = {
+  banner_url: null | string;
+  body: string;
+  cta_label: null | string;
+  cta_url: null | string;
+  event_tag: null | string;
+  id: string;
+  priority: number;
+  title: string;
+  triggered_at: null | string;
+};
 
 const callRpc = async <TData>(
   fn: string,
@@ -38,6 +231,38 @@ const callRpc = async <TData>(
   }
 
   return data as TData;
+};
+
+const parseResponseError = async (response: Response) => {
+  try {
+    const payload = await response.json();
+    return (
+      payload?.error ||
+      payload?.message ||
+      `${response.status} ${response.statusText}`
+    );
+  } catch {
+    return `${response.status} ${response.statusText}`;
+  }
+};
+
+const fetchJson = async <TData>(
+  input: string,
+  init?: RequestInit
+): Promise<TData> => {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(init?.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseResponseError(response));
+  }
+
+  return (await response.json()) as TData;
 };
 
 const asRemoteAsset = (value?: null | string) => {
@@ -55,6 +280,235 @@ const getCoverPicture = (account: AccountFragment) =>
   typeof account.metadata?.coverPicture === "string"
     ? account.metadata.coverPicture
     : null;
+
+const normalizeHandle = (value?: null | string) =>
+  (value || "").trim().toLowerCase().replace(/^@+/, "").replace(/\s+/g, "") ||
+  null;
+
+const normalizeWalletAddress = (value?: null | string) =>
+  value?.trim().toLowerCase() || null;
+
+const toNumber = (value?: null | number | string) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const mapProfileRow = (
+  row: PublicProfileRow,
+  extras?: {
+    e1xpTotal?: number;
+    referralCode?: null | string;
+  }
+): Every1Profile => ({
+  avatarUrl: row.avatar_url,
+  bannerUrl: row.banner_url,
+  bio: row.bio,
+  displayName: row.display_name,
+  e1xpTotal: extras?.e1xpTotal || 0,
+  id: row.id,
+  lensAccountAddress: row.lens_account_address,
+  referralCode: extras?.referralCode || null,
+  username: row.username,
+  verificationCategory: row.verification_category,
+  verificationStatus: row.verification_status || "unverified",
+  verifiedAt: row.verified_at,
+  walletAddress: row.wallet_address,
+  zoraHandle: row.zora_handle
+});
+
+const mapCommunityRow = (row: CommunityRow): Every1CommunitySummary => ({
+  avatarUrl: row.avatar_url,
+  bannerUrl: row.banner_url,
+  description: row.description,
+  id: row.id,
+  isMember: Boolean(row.is_member),
+  isOwner: Boolean(row.is_owner),
+  joinedAt: row.joined_at,
+  memberCount: toNumber(row.member_count),
+  membershipRole: row.membership_role,
+  membershipStatus: row.membership_status,
+  name: row.name,
+  ownerAvatarUrl: row.owner_avatar_url,
+  ownerDisplayName: row.owner_display_name,
+  ownerId: row.owner_id,
+  ownerUsername: row.owner_username,
+  postCount: toNumber(row.post_count),
+  slug: row.slug,
+  status: row.status,
+  verificationKind: row.verification_kind,
+  verificationStatus: row.verification_status || "unverified",
+  verifiedAt: row.verified_at,
+  visibility: row.visibility
+});
+
+const mapCommunityMemberRow = (
+  row: CommunityMemberRow
+): Every1CommunityMember => ({
+  avatarUrl: row.avatar_url,
+  displayName: row.display_name,
+  id: row.id,
+  joinedAt: row.joined_at,
+  role: row.role,
+  username: row.username,
+  walletAddress: row.wallet_address
+});
+
+const mapFollowListProfile = (row: FollowListRow): Every1FollowListProfile => ({
+  avatarUrl: row.avatar_url,
+  bannerUrl: row.banner_url,
+  bio: row.bio,
+  displayName: row.display_name,
+  followedAt: row.followed_at,
+  id: row.id,
+  lensAccountAddress: row.lens_account_address,
+  username: row.username,
+  walletAddress: row.wallet_address,
+  zoraHandle: row.zora_handle
+});
+
+const mapCommunityPostRow = (row: CommunityPostRow): Every1CommunityPost => ({
+  authorAvatarUrl: row.author_avatar_url,
+  authorDisplayName: row.author_display_name,
+  authorProfileId: row.author_profile_id,
+  authorUsername: row.author_username,
+  body: row.body,
+  communityId: row.community_id,
+  createdAt: row.created_at,
+  id: row.id,
+  mediaUrl: row.media_url,
+  updatedAt: row.updated_at
+});
+
+const mapSocialAccountRow = (
+  row: SocialAccountRow
+): Every1ProfileSocialAccount => ({
+  avatarUrl: row.avatar_url,
+  createdAt: row.created_at,
+  displayName: row.display_name,
+  handle: row.handle,
+  id: row.id,
+  isPrimary: row.is_primary,
+  isVerified: row.is_verified,
+  lastVerifiedAt: row.last_verified_at,
+  linkedAt: row.linked_at,
+  profileUrl: row.profile_url,
+  provider: row.provider,
+  providerUserId: row.provider_user_id
+});
+
+const mapVerificationRequestRow = (
+  row: VerificationRequestRow
+): Every1ProfileVerificationRequest => ({
+  adminNote: row.admin_note,
+  category: row.category,
+  claimedHandle: row.claimed_handle,
+  createdAt: row.created_at,
+  id: row.id,
+  note: row.note,
+  proofCheckedAt: row.proof_checked_at,
+  proofError: row.proof_error,
+  proofHandle: row.proof_handle,
+  proofPostedText: row.proof_posted_text,
+  proofPostId: row.proof_post_id,
+  proofPostUrl: row.proof_post_url,
+  proofStatus: row.proof_status,
+  proofVerifiedAt: row.proof_verified_at,
+  provider: row.provider,
+  reviewedAt: row.reviewed_at,
+  status: row.status,
+  verificationCode: row.verification_code
+});
+
+const mapCoinChatMessageRow = (
+  row: CoinChatMessageRow
+): Every1CoinChatMessage => ({
+  authorAvatarUrl: row.author_avatar_url,
+  authorDisplayName: row.author_display_name,
+  authorProfileId: row.author_profile_id,
+  authorUsername: row.author_username,
+  body: row.body,
+  coinAddress: row.coin_address,
+  createdAt: row.created_at,
+  id: row.id
+});
+
+const mapPopupCampaignRow = (
+  row: PopupCampaignRow
+): Every1ActivePopupCampaign => ({
+  bannerUrl: row.banner_url,
+  body: row.body,
+  ctaLabel: row.cta_label,
+  ctaUrl: row.cta_url,
+  eventTag: row.event_tag,
+  id: row.id,
+  priority: toNumber(row.priority),
+  title: row.title,
+  triggeredAt: row.triggered_at
+});
+
+const getProfileRowByAddress = async (
+  address: string
+): Promise<null | PublicProfileRow> => {
+  const client = getSupabaseClient();
+
+  const walletResult = await client
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .eq("wallet_address", address)
+    .maybeSingle<PublicProfileRow>();
+
+  if (walletResult.error) {
+    throw walletResult.error;
+  }
+
+  if (walletResult.data) {
+    return walletResult.data;
+  }
+
+  const lensResult = await client
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .eq("lens_account_address", address)
+    .maybeSingle<PublicProfileRow>();
+
+  if (lensResult.error) {
+    throw lensResult.error;
+  }
+
+  return lensResult.data || null;
+};
+
+const getProfileRowByUsername = async (
+  username: string
+): Promise<null | PublicProfileRow> => {
+  const client = getSupabaseClient();
+
+  const usernameResult = await client
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .eq("username", username)
+    .maybeSingle<PublicProfileRow>();
+
+  if (usernameResult.error) {
+    throw usernameResult.error;
+  }
+
+  if (usernameResult.data) {
+    return usernameResult.data;
+  }
+
+  const zoraResult = await client
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .eq("zora_handle", username)
+    .maybeSingle<PublicProfileRow>();
+
+  if (zoraResult.error) {
+    throw zoraResult.error;
+  }
+
+  return zoraResult.data || null;
+};
 
 export const normalizeReferralCode = (value?: null | string) => {
   const normalized = (value || "")
@@ -81,33 +535,57 @@ export const buildReferralLink = (referralCode?: null | string) => {
   return url.toString();
 };
 
+export const upsertEvery1Profile = async (input: {
+  avatarUrl?: null | string;
+  bannerUrl?: null | string;
+  bio?: null | string;
+  displayName?: null | string;
+  lensAccountAddress?: null | string;
+  username?: null | string;
+  walletAddress?: null | string;
+  zoraHandle?: null | string;
+}) =>
+  callRpc<Every1Profile>("upsert_external_profile", {
+    input_avatar_url: asRemoteAsset(input.avatarUrl),
+    input_banner_url: asRemoteAsset(input.bannerUrl),
+    input_bio: input.bio || null,
+    input_display_name: input.displayName || null,
+    input_lens_account_address: input.lensAccountAddress || null,
+    input_username: input.username || null,
+    input_wallet_address: input.walletAddress || null,
+    input_zora_handle: input.zoraHandle || null
+  });
+
 export const syncEvery1Profile = async (account: AccountFragment) => {
   const displayName = account.metadata?.name || getPreferredUsername(account);
 
   try {
-    return await callRpc<Every1Profile>("upsert_external_profile", {
-      input_avatar_url: asRemoteAsset(getAvatar(account)),
-      input_banner_url: asRemoteAsset(getCoverPicture(account)),
-      input_bio: account.metadata?.bio || null,
-      input_display_name: displayName,
-      input_lens_account_address: account.address,
-      input_username: getPreferredUsername(account),
-      input_wallet_address: account.owner,
-      input_zora_handle: getPreferredUsername(account)
+    return await upsertEvery1Profile({
+      avatarUrl: getAvatar(account),
+      bannerUrl: getCoverPicture(account),
+      bio: account.metadata?.bio || null,
+      displayName,
+      lensAccountAddress: account.address,
+      username: getPreferredUsername(account),
+      walletAddress: account.owner,
+      zoraHandle: getPreferredUsername(account)
     });
   } catch {
-    return callRpc<Every1Profile>("upsert_external_profile", {
-      input_avatar_url: asRemoteAsset(getAvatar(account)),
-      input_banner_url: asRemoteAsset(getCoverPicture(account)),
-      input_bio: account.metadata?.bio || null,
-      input_display_name: displayName,
-      input_lens_account_address: account.address,
-      input_username: null,
-      input_wallet_address: account.owner,
-      input_zora_handle: getPreferredUsername(account)
+    return upsertEvery1Profile({
+      avatarUrl: getAvatar(account),
+      bannerUrl: getCoverPicture(account),
+      bio: account.metadata?.bio || null,
+      displayName,
+      lensAccountAddress: account.address,
+      username: null,
+      walletAddress: account.owner,
+      zoraHandle: getPreferredUsername(account)
     });
   }
 };
+
+export const ensureEvery1ProfileForAccount = async (account: AccountFragment) =>
+  syncEvery1Profile(account);
 
 export const captureReferralJoin = async (
   profileId: string,
@@ -182,22 +660,7 @@ export const listProfileNotifications = async (
     limit?: number;
   } = {}
 ) => {
-  const rows = await callRpc<
-    Array<{
-      actor_avatar_url: null | string;
-      actor_display_name: null | string;
-      actor_id: null | string;
-      actor_username: null | string;
-      body: null | string;
-      created_at: string;
-      data: Record<string, unknown>;
-      id: string;
-      is_read: boolean;
-      kind: Every1Notification["kind"];
-      target_key: null | string;
-      title: string;
-    }>
-  >("list_profile_notifications", {
+  const rows = await callRpc<NotificationRow[]>("list_profile_notifications", {
     input_kind: kind || null,
     input_limit: limit,
     input_profile_id: profileId
@@ -239,6 +702,15 @@ export const getMobileNavBadgeCounts = async (profileId: string) =>
     input_profile_id: profileId
   });
 
+export const markMobileNavBadgeSeen = async (
+  profileId: string,
+  badgeKey: Every1MobileNavBadgeKey
+) =>
+  callRpc<Every1MobileNavBadgeSeenResult>("mark_mobile_nav_badge_seen", {
+    input_badge_key: badgeKey,
+    input_profile_id: profileId
+  });
+
 export const getPublicE1xpTotalsByWallets = async (
   walletAddresses: string[]
 ) => {
@@ -271,11 +743,656 @@ export const getPublicE1xpTotalsByWallets = async (
   ) as Record<string, number>;
 };
 
-export const markMobileNavBadgeSeen = async (
-  profileId: string,
-  badgeKey: Every1MobileNavBadgeKey
+export const getPublicEvery1ProfilesByWallets = async (
+  walletAddresses: string[]
+) => {
+  const normalizedAddresses = Array.from(
+    new Set(walletAddresses.map(normalizeWalletAddress).filter(Boolean))
+  ) as string[];
+
+  if (!normalizedAddresses.length) {
+    return {} as Record<string, Every1Profile>;
+  }
+
+  const { data, error } = await getSupabaseClient()
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .in("wallet_address", normalizedAddresses);
+
+  if (error) {
+    throw error;
+  }
+
+  const e1xpTotals = await getPublicE1xpTotalsByWallets(
+    normalizedAddresses
+  ).catch(() => ({}) as Record<string, number>);
+
+  const rows = (data || []) as PublicProfileRow[];
+
+  return Object.fromEntries(
+    rows
+      .filter((row) => Boolean(row.wallet_address))
+      .map((row) => [
+        row.wallet_address?.toLowerCase() as string,
+        mapProfileRow(row, {
+          e1xpTotal: row.wallet_address
+            ? e1xpTotals[row.wallet_address.toLowerCase()] || 0
+            : 0
+        })
+      ])
+  ) as Record<string, Every1Profile>;
+};
+
+export const getPublicEvery1Profile = async ({
+  address,
+  username
+}: {
+  address?: null | string;
+  username?: null | string;
+}) => {
+  const normalizedAddress = normalizeWalletAddress(address);
+  const normalizedUsername = normalizeHandle(username);
+
+  let row: null | PublicProfileRow = null;
+
+  if (normalizedAddress) {
+    row = await getProfileRowByAddress(normalizedAddress);
+  }
+
+  if (!row && normalizedUsername) {
+    row = await getProfileRowByUsername(normalizedUsername);
+  }
+
+  if (!row) {
+    return null;
+  }
+
+  const e1xpTotal = row.wallet_address
+    ? (
+        await getPublicE1xpTotalsByWallets([row.wallet_address]).catch(
+          () => ({}) as Record<string, number>
+        )
+      )[row.wallet_address.toLowerCase()] || 0
+    : 0;
+
+  return mapProfileRow(row, { e1xpTotal });
+};
+
+const scoreProfileSearchResult = (
+  row: PublicProfileRow,
+  normalizedQuery: string
+) => {
+  const username = normalizeHandle(row.username);
+  const zoraHandle = normalizeHandle(row.zora_handle);
+  const displayName = (row.display_name || "").trim().toLowerCase();
+  const walletAddress = normalizeWalletAddress(row.wallet_address);
+  const lensAddress = normalizeWalletAddress(row.lens_account_address);
+  let score = 0;
+
+  if (row.verification_status === "verified") {
+    score += 30;
+  }
+
+  if (username === normalizedQuery || zoraHandle === normalizedQuery) {
+    score += 300;
+  }
+
+  if (walletAddress === normalizedQuery || lensAddress === normalizedQuery) {
+    score += 280;
+  }
+
+  if (
+    username?.startsWith(normalizedQuery) ||
+    zoraHandle?.startsWith(normalizedQuery)
+  ) {
+    score += 150;
+  }
+
+  if (displayName.startsWith(normalizedQuery)) {
+    score += 120;
+  }
+
+  if (
+    username?.includes(normalizedQuery) ||
+    zoraHandle?.includes(normalizedQuery)
+  ) {
+    score += 70;
+  }
+
+  if (displayName.includes(normalizedQuery)) {
+    score += 45;
+  }
+
+  if (row.avatar_url) {
+    score += 4;
+  }
+
+  return score;
+};
+
+export const searchPublicEvery1Profiles = async (query: string, limit = 20) => {
+  const normalizedQuery = normalizeHandle(query) || query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return [] as Every1Profile[];
+  }
+
+  const safeSearch = normalizedQuery.replace(/[%_]/g, "");
+  const safeDisplaySearch = query.trim().replace(/[%_]/g, "");
+  const client = getSupabaseClient();
+  const queries = [
+    client
+      .from("profiles")
+      .select(PUBLIC_PROFILE_SELECT)
+      .ilike("username", `%${safeSearch}%`)
+      .limit(limit),
+    client
+      .from("profiles")
+      .select(PUBLIC_PROFILE_SELECT)
+      .ilike("zora_handle", `%${safeSearch}%`)
+      .limit(limit),
+    client
+      .from("profiles")
+      .select(PUBLIC_PROFILE_SELECT)
+      .ilike("display_name", `%${safeDisplaySearch}%`)
+      .limit(limit),
+    client
+      .from("profiles")
+      .select(PUBLIC_PROFILE_SELECT)
+      .ilike("wallet_address", `%${safeSearch}%`)
+      .limit(limit)
+  ];
+
+  const results = await Promise.all(queries);
+  const rowsById = new Map<string, PublicProfileRow>();
+
+  for (const result of results) {
+    if (result.error) {
+      throw result.error;
+    }
+
+    for (const row of (result.data || []) as PublicProfileRow[]) {
+      rowsById.set(row.id, row);
+    }
+  }
+
+  return [...rowsById.values()]
+    .sort(
+      (left, right) =>
+        scoreProfileSearchResult(right, normalizedQuery) -
+        scoreProfileSearchResult(left, normalizedQuery)
+    )
+    .slice(0, limit)
+    .map((row) => mapProfileRow(row));
+};
+
+export const syncProfileSocialAccount = async (input: {
+  avatarUrl?: null | string;
+  displayName?: null | string;
+  handle: string;
+  profileId: string;
+  profileUrl?: null | string;
+  provider: Every1ProfileSocialAccount["provider"];
+  providerUserId?: null | string;
+}) =>
+  callRpc<Every1ProfileSocialAccount>("sync_profile_social_account", {
+    input_avatar_url: input.avatarUrl || null,
+    input_display_name: input.displayName || null,
+    input_handle: input.handle,
+    input_profile_id: input.profileId,
+    input_profile_url: input.profileUrl || null,
+    input_provider: input.provider,
+    input_provider_user_id: input.providerUserId || null
+  });
+
+export const listProfileSocialAccounts = async (profileId: string) => {
+  const rows = await callRpc<SocialAccountRow[]>(
+    "list_profile_social_accounts",
+    {
+      input_profile_id: profileId
+    }
+  );
+
+  return rows.map(mapSocialAccountRow) satisfies Every1ProfileSocialAccount[];
+};
+
+export const submitProfileVerificationRequest = async (input: {
+  category?: null | string;
+  claimedHandle: string;
+  note?: null | string;
+  profileId: string;
+  provider: Every1ProfileVerificationRequest["provider"];
+}) =>
+  callRpc<Every1ProfileVerificationRequest>(
+    "submit_profile_verification_request",
+    {
+      input_category: input.category || null,
+      input_claimed_handle: input.claimedHandle,
+      input_note: input.note || null,
+      input_profile_id: input.profileId,
+      input_provider: input.provider
+    }
+  );
+
+export const listProfileVerificationRequests = async (profileId: string) => {
+  const rows = await callRpc<VerificationRequestRow[]>(
+    "list_profile_verification_requests",
+    {
+      input_profile_id: profileId
+    }
+  );
+
+  return rows.map(
+    mapVerificationRequestRow
+  ) satisfies Every1ProfileVerificationRequest[];
+};
+
+export const submitProfileVerificationProofEvidence = async (input: {
+  avatarUrl?: null | string;
+  displayName?: null | string;
+  postText?: null | string;
+  postUrl?: null | string;
+  profileUrl?: null | string;
+  proofHandle?: null | string;
+  providerUserId?: null | string;
+  requestId: string;
+}) =>
+  callRpc<Every1VerificationProofResult>(
+    "submit_profile_verification_proof_evidence",
+    {
+      input_avatar_url: input.avatarUrl || null,
+      input_display_name: input.displayName || null,
+      input_post_text: input.postText || null,
+      input_post_url: input.postUrl || null,
+      input_profile_url: input.profileUrl || null,
+      input_proof_handle: input.proofHandle || null,
+      input_provider_user_id: input.providerUserId || null,
+      input_request_id: input.requestId
+    }
+  );
+
+export const getVerificationRuntimeConfig = async () =>
+  fetchJson<{
+    enabled: boolean;
+    xVerificationEnabled: boolean;
+  }>("/api/verification/config");
+
+export const verifyXProfileVerificationProof = async (input: {
+  linkedDisplayName?: null | string;
+  linkedHandle: string;
+  linkedProfileImageUrl?: null | string;
+  linkedSubject?: null | string;
+  postUrl: string;
+  profileId: string;
+  requestId: string;
+}) =>
+  fetchJson<Every1VerificationProofResult>("/api/verification/x/verify", {
+    body: JSON.stringify({
+      linkedDisplayName: input.linkedDisplayName || null,
+      linkedHandle: input.linkedHandle,
+      linkedProfileImageUrl: input.linkedProfileImageUrl || null,
+      linkedSubject: input.linkedSubject || null,
+      postUrl: input.postUrl,
+      profileId: input.profileId,
+      requestId: input.requestId
+    }),
+    method: "POST"
+  });
+
+export const getProfileFollowStats = async (profileId?: null | string) =>
+  callRpc<Every1FollowStats>("get_profile_follow_stats", {
+    input_profile_id: profileId || null
+  });
+
+export const getFollowRelationship = async (
+  viewerProfileId?: null | string,
+  targetProfileId?: null | string
 ) =>
-  callRpc<Every1MobileNavBadgeSeenResult>("mark_mobile_nav_badge_seen", {
-    input_badge_key: badgeKey,
+  callRpc<Every1FollowRelationship>("get_follow_relationship", {
+    input_target_profile_id: targetProfileId || null,
+    input_viewer_profile_id: viewerProfileId || null
+  });
+
+export const followProfile = async (
+  followerProfileId: string,
+  followedProfileId: string
+) =>
+  callRpc<Every1FollowMutationResult>("follow_profile", {
+    input_followed_profile_id: followedProfileId,
+    input_follower_profile_id: followerProfileId
+  });
+
+export const unfollowProfile = async (
+  followerProfileId: string,
+  followedProfileId: string
+) =>
+  callRpc<Every1FollowMutationResult>("unfollow_profile", {
+    input_followed_profile_id: followedProfileId,
+    input_follower_profile_id: followerProfileId
+  });
+
+export const listProfileFollowers = async (profileId: string, limit = 100) => {
+  const rows = await callRpc<FollowListRow[]>("list_profile_followers", {
+    input_limit: limit,
     input_profile_id: profileId
+  });
+
+  return rows.map(mapFollowListProfile) satisfies Every1FollowListProfile[];
+};
+
+export const listProfileFollowing = async (profileId: string, limit = 100) => {
+  const rows = await callRpc<FollowListRow[]>("list_profile_following", {
+    input_limit: limit,
+    input_profile_id: profileId
+  });
+
+  return rows.map(mapFollowListProfile) satisfies Every1FollowListProfile[];
+};
+
+export const createCommunity = async (input: {
+  avatarUrl?: null | string;
+  bannerUrl?: null | string;
+  description?: null | string;
+  name: string;
+  ownerProfileId: string;
+  slug?: null | string;
+  visibility?: Every1CommunitySummary["visibility"];
+}) =>
+  callRpc<Every1CommunityMutationResult>("create_community", {
+    input_avatar_url: input.avatarUrl || null,
+    input_banner_url: input.bannerUrl || null,
+    input_description: input.description || null,
+    input_name: input.name,
+    input_owner_profile_id: input.ownerProfileId,
+    input_slug: input.slug || null,
+    input_visibility: input.visibility || "public"
+  });
+
+export const listProfileCommunities = async (input?: {
+  feedType?: "discover" | "managed" | "member";
+  limit?: number;
+  profileId?: null | string;
+  search?: null | string;
+}) => {
+  const rows = await callRpc<CommunityRow[]>("list_profile_communities", {
+    input_feed_type: input?.feedType || "discover",
+    input_limit: input?.limit || 50,
+    input_profile_id: input?.profileId || null,
+    input_search: input?.search || null
+  });
+
+  return rows.map(mapCommunityRow) satisfies Every1CommunitySummary[];
+};
+
+export const getCommunityBySlug = async (input: {
+  profileId?: null | string;
+  slug: string;
+}) => {
+  const rows = await callRpc<CommunityRow[]>("get_community_by_slug", {
+    input_profile_id: input.profileId || null,
+    input_slug: input.slug
+  });
+
+  const communityRow = rows?.[0];
+
+  if (!communityRow) {
+    return null;
+  }
+
+  const memberRows = await callRpc<CommunityMemberRow[]>(
+    "list_community_members",
+    {
+      input_community_id: communityRow.id,
+      input_limit: 6
+    }
+  ).catch(() => []);
+
+  return {
+    ...mapCommunityRow(communityRow),
+    membersPreview: (memberRows || []).map(mapCommunityMemberRow)
+  } satisfies Every1CommunityDetails;
+};
+
+export const listCommunityPosts = async (input: {
+  communityId: string;
+  limit?: number;
+  profileId?: null | string;
+}) => {
+  const rows = await callRpc<CommunityPostRow[]>("list_community_posts", {
+    input_community_id: input.communityId,
+    input_limit: input.limit || 50,
+    input_profile_id: input.profileId || null
+  });
+
+  return rows.map(mapCommunityPostRow) satisfies Every1CommunityPost[];
+};
+
+export const joinCommunity = async (communityId: string, profileId: string) =>
+  callRpc<Every1CommunityMutationResult>("join_community", {
+    input_community_id: communityId,
+    input_profile_id: profileId
+  });
+
+export const leaveCommunity = async (communityId: string, profileId: string) =>
+  callRpc<Every1CommunityMutationResult>("leave_community", {
+    input_community_id: communityId,
+    input_profile_id: profileId
+  });
+
+export const getCommunityVerificationContext = async (input: {
+  communityId: string;
+  viewerProfileId?: null | string;
+}) => {
+  const rows = await callRpc<
+    Array<{
+      admin_note: null | string;
+      category: null | string;
+      community_id: string;
+      confirmed_admin_count: number;
+      created_at: string;
+      group_platform: null | "other" | "telegram" | "whatsapp";
+      group_url: null | string;
+      note: null | string;
+      pending_admin_count: number;
+      request_id: string;
+      requested_by_display_name: null | string;
+      requested_by_profile_id: string;
+      requested_by_username: null | string;
+      required_admin_count: number;
+      reviewed_at: null | string;
+      status: Every1CommunityDetails["verificationStatus"];
+      verification_code: string;
+      verification_kind: "community_led" | "official";
+      viewer_can_confirm: boolean;
+      viewer_confirmed: boolean;
+      viewer_is_requester: boolean;
+    }>
+  >("get_community_verification_context", {
+    input_community_id: input.communityId,
+    input_viewer_profile_id: input.viewerProfileId || null
+  });
+
+  const row = rows?.[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    adminNote: row.admin_note,
+    category: row.category,
+    communityId: row.community_id,
+    confirmedAdminCount: toNumber(row.confirmed_admin_count),
+    createdAt: row.created_at,
+    groupPlatform: row.group_platform,
+    groupUrl: row.group_url,
+    note: row.note,
+    pendingAdminCount: toNumber(row.pending_admin_count),
+    requestedByDisplayName: row.requested_by_display_name,
+    requestedByProfileId: row.requested_by_profile_id,
+    requestedByUsername: row.requested_by_username,
+    requestId: row.request_id,
+    requiredAdminCount: toNumber(row.required_admin_count),
+    reviewedAt: row.reviewed_at,
+    status: row.status,
+    verificationCode: row.verification_code,
+    verificationKind: row.verification_kind,
+    viewerCanConfirm: Boolean(row.viewer_can_confirm),
+    viewerConfirmed: Boolean(row.viewer_confirmed),
+    viewerIsRequester: Boolean(row.viewer_is_requester)
+  } satisfies Every1CommunityVerificationContext;
+};
+
+export const listCommunityVerificationConfirmations = async (
+  requestId: string
+) => {
+  const rows = await callRpc<
+    Array<{
+      avatar_url: null | string;
+      confirmed_at: null | string;
+      created_at: string;
+      display_name: null | string;
+      id: string;
+      invited_identifier: null | string;
+      profile_id: string;
+      role_label: null | string;
+      status: "confirmed" | "pending";
+      username: null | string;
+      wallet_address: null | string;
+    }>
+  >("list_community_verification_confirmations", {
+    input_request_id: requestId
+  });
+
+  return rows.map((row) => ({
+    avatarUrl: row.avatar_url,
+    confirmedAt: row.confirmed_at,
+    createdAt: row.created_at,
+    displayName: row.display_name,
+    id: row.id,
+    invitedIdentifier: row.invited_identifier,
+    profileId: row.profile_id,
+    roleLabel: row.role_label,
+    status: row.status,
+    username: row.username,
+    walletAddress: row.wallet_address
+  })) satisfies Every1CommunityVerificationConfirmation[];
+};
+
+export const submitCommunityVerificationRequest = async (input: {
+  adminIdentifiers?: string[];
+  category?: null | string;
+  communityId: string;
+  groupPlatform?: null | "other" | "telegram" | "whatsapp";
+  groupUrl?: null | string;
+  note?: null | string;
+  requesterProfileId: string;
+  verificationKind: "community_led" | "official";
+}) =>
+  callRpc<Every1CommunityVerificationRequestResult>(
+    "submit_community_verification_request",
+    {
+      input_admin_identifiers: input.adminIdentifiers?.length
+        ? input.adminIdentifiers
+        : null,
+      input_category: input.category || null,
+      input_community_id: input.communityId,
+      input_group_platform: input.groupPlatform || null,
+      input_group_url: input.groupUrl || null,
+      input_note: input.note || null,
+      input_requester_profile_id: input.requesterProfileId,
+      input_verification_kind: input.verificationKind
+    }
+  );
+
+export const confirmCommunityVerificationAdmin = async (input: {
+  profileId: string;
+  requestId: string;
+}) =>
+  callRpc<Every1CommunityVerificationConfirmationResult>(
+    "confirm_community_verification_admin",
+    {
+      input_profile_id: input.profileId,
+      input_request_id: input.requestId
+    }
+  );
+
+export const getProfileEngagementNudgeSignals = async (profileId: string) =>
+  callRpc<Every1EngagementNudgeSignals>(
+    "get_profile_engagement_nudge_signals",
+    {
+      input_profile_id: profileId
+    }
+  );
+
+export const createProfileEngagementNudge = async (input: {
+  body?: null | string;
+  cooldownMinutes?: number;
+  data?: Record<string, unknown>;
+  kind: string;
+  profileId: string;
+  sourceKey: string;
+  targetKey?: null | string;
+  title: string;
+}) =>
+  callRpc<Every1EngagementNudgeResult>("create_profile_engagement_nudge", {
+    input_body: input.body || null,
+    input_cooldown_minutes: input.cooldownMinutes || 45,
+    input_data: input.data || {},
+    input_nudge_kind: input.kind,
+    input_profile_id: input.profileId,
+    input_source_key: input.sourceKey,
+    input_target_key: input.targetKey || null,
+    input_title: input.title
+  });
+
+export const getActiveSpecialEventPopup = async (profileId: string) => {
+  const rows = await callRpc<PopupCampaignRow[]>(
+    "get_active_special_event_popup",
+    {
+      input_profile_id: profileId
+    }
+  );
+
+  const row = rows?.[0];
+  return row ? mapPopupCampaignRow(row) : null;
+};
+
+export const dismissSpecialEventPopup = async (
+  profileId: string,
+  campaignId: string
+) =>
+  callRpc<boolean>("dismiss_special_event_popup", {
+    input_campaign_id: campaignId,
+    input_profile_id: profileId
+  });
+
+export const syncExploreListingEvents = async (
+  items: Array<Record<string, unknown>>
+) =>
+  callRpc<number>("sync_explore_listing_events", {
+    input_items: items
+  });
+
+export const listCoinChatMessages = async (input: {
+  coinAddress: string;
+  limit?: number;
+}) => {
+  const rows = await callRpc<CoinChatMessageRow[]>("list_coin_chat_messages", {
+    input_coin_address: input.coinAddress,
+    input_limit: input.limit || 100
+  });
+
+  return rows.map(mapCoinChatMessageRow) satisfies Every1CoinChatMessage[];
+};
+
+export const createCoinChatMessage = async (input: {
+  body: string;
+  coinAddress: string;
+  profileId: string;
+}) =>
+  callRpc<Every1CoinChatMutationResult>("create_coin_chat_message", {
+    input_author_profile_id: input.profileId,
+    input_body: input.body,
+    input_coin_address: input.coinAddress
   });

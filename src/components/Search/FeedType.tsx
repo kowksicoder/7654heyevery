@@ -2,9 +2,9 @@ import { useSearchParams } from "react-router";
 import { Tabs } from "@/components/Shared/UI";
 
 export enum SearchTabFocus {
-  Accounts = "ACCOUNTS",
-  Posts = "POSTS",
-  Groups = "GROUPS"
+  Coins = "COINS",
+  Creators = "CREATORS",
+  Communities = "COMMUNITIES"
 }
 
 interface FeedTypeProps {
@@ -15,9 +15,9 @@ const FeedType = ({ feedType }: FeedTypeProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const tabs = [
-    { name: "Accounts", type: SearchTabFocus.Accounts },
-    { name: "Posts", type: SearchTabFocus.Posts },
-    { name: "Groups", type: SearchTabFocus.Groups }
+    { name: "Coins", type: SearchTabFocus.Coins },
+    { name: "Creators", type: SearchTabFocus.Creators },
+    { name: "Communities", type: SearchTabFocus.Communities }
   ];
 
   const updateQuery = (type?: string) => {
@@ -25,15 +25,18 @@ const FeedType = ({ feedType }: FeedTypeProps) => {
       return;
     }
 
-    searchParams.set("type", type);
-    setSearchParams(searchParams);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("type", type.toLowerCase());
+    setSearchParams(nextParams);
   };
 
   return (
     <Tabs
       active={feedType}
-      className="mx-5 mb-5 md:mx-0"
+      className="mx-0 mb-0"
+      itemClassName="rounded-xl border border-gray-200/80 bg-white px-2.5 py-1.5 font-medium text-[11px] text-gray-700 md:rounded-2xl md:px-3 md:py-1.75 md:text-[12px] dark:border-gray-800/80 dark:bg-[#090909] dark:text-gray-200"
       layoutId="search_tab"
+      mobileScrollable
       setActive={updateQuery}
       tabs={tabs}
     />

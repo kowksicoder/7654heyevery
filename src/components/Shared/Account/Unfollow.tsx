@@ -1,13 +1,20 @@
-import { useApolloClient } from "@apollo/client";
-import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/Shared/UI";
-import { ERRORS } from "@/data/errors";
-import errorToast from "@/helpers/errorToast";
-import useTransactionLifecycle from "@/hooks/useTransactionLifecycle";
-import { type AccountFragment, useUnfollowMutation } from "@/indexer/generated";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import {
+  EVERY1_FOLLOW_LIST_QUERY_KEY,
+  EVERY1_FOLLOW_RELATIONSHIP_QUERY_KEY,
+  EVERY1_FOLLOW_STATS_QUERY_KEY,
+  EVERY1_PROFILE_QUERY_KEY,
+  ensureEvery1ProfileForAccount,
+  syncEvery1Profile,
+  unfollowProfile
+} from "@/helpers/every1";
+import useOpenAuth from "@/hooks/useOpenAuth";
+import type { AccountFragment } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import type { ApolloClientError } from "@/types/errors";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 
 interface UnfollowProps {
   buttonClassName: string;
@@ -22,65 +29,51 @@ const Unfollow = ({
   small,
   title
 }: UnfollowProps) => {
+  const queryClient = useQueryClient();
   const { currentAccount } = useAccountStore();
-  const { setShowAuthModal } = useAuthModalStore();
+  const { profile, setProfile } = useEvery1Store();
+  const openAuth = useOpenAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { cache } = useApolloClient();
-  const handleTransactionLifecycle = useTransactionLifecycle();
-
-  const updateCache = () => {
-    if (!account.operations) {
-      return;
-    }
-
-    cache.modify({
-      fields: { isFollowedByMe: () => false },
-      id: cache.identify(account.operations)
-    });
-  };
-
-  const onCompleted = () => {
-    updateCache();
-    setIsSubmitting(false);
-  };
-
-  const onError = useCallback((error: ApolloClientError) => {
-    setIsSubmitting(false);
-    errorToast(error);
-  }, []);
-
-  const [unfollow] = useUnfollowMutation({
-    onCompleted: async ({ unfollow }) => {
-      if (unfollow.__typename === "UnfollowResponse") {
-        return onCompleted();
-      }
-
-      if (unfollow.__typename === "AccountFollowOperationValidationFailed") {
-        return onError({
-          message: unfollow.reason,
-          name: ERRORS.SomethingWentWrong
-        });
-      }
-
-      return await handleTransactionLifecycle({
-        onCompleted,
-        onError,
-        transactionData: unfollow
-      });
-    },
-    onError
-  });
 
   const handleCreateUnfollow = async () => {
     if (!currentAccount) {
-      return setShowAuthModal(true);
+      return void openAuth("open_login");
     }
 
     setIsSubmitting(true);
     umami.track("unfollow");
-    return await unfollow({
-      variables: { request: { account: account.address } }
-    });
+
+    try {
+      const viewerProfile =
+        profile || (await syncEvery1Profile(currentAccount));
+      const targetProfile = await ensureEvery1ProfileForAccount(account);
+
+      if (!profile?.id || profile.id !== viewerProfile.id) {
+        setProfile(viewerProfile);
+      }
+
+      await unfollowProfile(viewerProfile.id, targetProfile.id);
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_PROFILE_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_RELATIONSHIP_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_STATS_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_LIST_QUERY_KEY]
+        })
+      ]);
+    } catch (error) {
+      console.error("Failed to unfollow profile", error);
+      toast.error("Couldn't unfollow this profile");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

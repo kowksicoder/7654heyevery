@@ -1,69 +1,44 @@
 import { UserGroupIcon } from "@heroicons/react/24/outline";
-import { useCallback } from "react";
-import { WindowVirtualizer } from "virtua";
 import SingleGroup from "@/components/Shared/Group/SingleGroup";
 import GroupListShimmer from "@/components/Shared/Shimmer/GroupListShimmer";
 import { EmptyState, ErrorMessage } from "@/components/Shared/UI";
 import { GroupsFeedType } from "@/data/enums";
-import useLoadMoreOnIntersect from "@/hooks/useLoadMoreOnIntersect";
-import {
-  GroupsOrderBy,
-  type GroupsRequest,
-  PageSize,
-  useGroupsQuery
-} from "@/indexer/generated";
-import { useAccountStore } from "@/store/persisted/useAccountStore";
+import useEvery1Communities from "@/hooks/useEvery1Communities";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 
 interface ListProps {
   feedType: GroupsFeedType;
 }
 
+const EMPTY_STATE_COPY: Record<GroupsFeedType, string> = {
+  [GroupsFeedType.Discover]: "No communities found yet.",
+  [GroupsFeedType.Managed]: "You are not managing any communities yet.",
+  [GroupsFeedType.Member]: "You have not joined any communities yet."
+};
+
+const mapFeedType = (
+  feedType: GroupsFeedType
+): "discover" | "managed" | "member" => {
+  switch (feedType) {
+    case GroupsFeedType.Managed:
+      return "managed";
+    case GroupsFeedType.Member:
+      return "member";
+    default:
+      return "discover";
+  }
+};
+
 const List = ({ feedType }: ListProps) => {
-  const { currentAccount } = useAccountStore();
-
-  const request: GroupsRequest = {
-    filter: {
-      ...(feedType === GroupsFeedType.Member && {
-        member: currentAccount?.address
-      }),
-      ...(feedType === GroupsFeedType.Managed && {
-        managedBy: { address: currentAccount?.address }
-      })
-    },
-    orderBy: GroupsOrderBy.LatestFirst,
-    pageSize: PageSize.Fifty
-  };
-
-  const { data, error, fetchMore, loading } = useGroupsQuery({
-    variables: { request }
+  const { profile } = useEvery1Store();
+  const { data, error, isLoading } = useEvery1Communities({
+    feedType: mapFeedType(feedType),
+    limit: 60,
+    profileId: profile?.id || null
   });
 
-  const groups = data?.groups?.items;
-  const pageInfo = data?.groups?.pageInfo;
-  const hasMore = pageInfo?.next;
-
-  const handleEndReached = useCallback(async () => {
-    if (hasMore) {
-      await fetchMore({
-        variables: { request: { ...request, cursor: pageInfo?.next } }
-      });
-    }
-  }, [fetchMore, hasMore, pageInfo?.next, request]);
-
-  const loadMoreRef = useLoadMoreOnIntersect(handleEndReached);
-
-  if (loading) {
+  if (isLoading) {
     return <GroupListShimmer />;
-  }
-
-  if (!groups?.length) {
-    return (
-      <EmptyState
-        hideCard
-        icon={<UserGroupIcon className="size-8" />}
-        message="No groups."
-      />
-    );
   }
 
   if (error) {
@@ -71,21 +46,28 @@ const List = ({ feedType }: ListProps) => {
       <ErrorMessage
         className="m-5"
         error={error}
-        title="Failed to load groups"
+        title="Failed to load communities"
+      />
+    );
+  }
+
+  if (!data?.length) {
+    return (
+      <EmptyState
+        hideCard
+        icon={<UserGroupIcon className="size-8" />}
+        message={EMPTY_STATE_COPY[feedType]}
       />
     );
   }
 
   return (
-    <div className="virtual-divider-list-window">
-      <WindowVirtualizer>
-        {groups.map((group) => (
-          <div className="p-5" key={group.address}>
-            <SingleGroup group={group} isBig showDescription />
-          </div>
-        ))}
-        {hasMore && <span ref={loadMoreRef} />}
-      </WindowVirtualizer>
+    <div className="divide-y divide-gray-200 dark:divide-gray-800">
+      {data.map((community) => (
+        <div className="p-5" key={community.id}>
+          <SingleGroup community={community} isBig showDescription />
+        </div>
+      ))}
     </div>
   );
 };

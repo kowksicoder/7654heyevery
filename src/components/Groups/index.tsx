@@ -1,18 +1,18 @@
 import { useState } from "react";
-import CreateGroup from "@/components/Groups/Sidebar/Create/CreateGroup";
 import Footer from "@/components/Shared/Footer";
 import NotLoggedIn from "@/components/Shared/NotLoggedIn";
 import PageLayout from "@/components/Shared/PageLayout";
 import { Card } from "@/components/Shared/UI";
 import { GroupsFeedType } from "@/data/enums";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
+import CreateCommunity from "./CreateCommunity";
 import FeedType from "./FeedType";
 import List from "./List";
 
 const Groups = () => {
   const { currentAccount } = useAccountStore();
   const [feedType, setFeedType] = useState<GroupsFeedType>(
-    GroupsFeedType.Managed
+    GroupsFeedType.Discover
   );
 
   if (!currentAccount) {
@@ -21,9 +21,10 @@ const Groups = () => {
 
   return (
     <PageLayout
+      description="Join Every1 communities, manage your own spaces, and keep group conversations moving."
       sidebar={
         <>
-          <CreateGroup />
+          <CreateCommunity />
           <Footer />
         </>
       }

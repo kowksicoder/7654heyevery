@@ -5,9 +5,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { setApiKey } from "@zoralabs/coins-sdk";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorMessage, Spinner } from "@/components/Shared/UI";
-import { HomeFeedType, HomeFeedView } from "@/data/enums";
+import { HomeFeedSort, HomeFeedType, HomeFeedView } from "@/data/enums";
 import cn from "@/helpers/cn";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
 import useLoadMoreOnIntersect from "@/hooks/useLoadMoreOnIntersect";
@@ -36,12 +36,20 @@ interface ZoraFeedPage {
 const getEmptyIcon = (feedType: HomeFeedType) => {
   if (
     feedType === HomeFeedType.HIGHLIGHTS ||
-    feedType === HomeFeedType.POP_CULTURE
+    feedType === HomeFeedType.POP_CULTURE ||
+    feedType === HomeFeedType.PHOTOGRAPHY ||
+    feedType === HomeFeedType.COMEDIANS
   ) {
     return <SparklesIcon className="size-8" />;
   }
 
-  if (feedType === HomeFeedType.FORYOU || feedType === HomeFeedType.LIFESTYLE) {
+  if (
+    feedType === HomeFeedType.FORYOU ||
+    feedType === HomeFeedType.LIFESTYLE ||
+    feedType === HomeFeedType.PODCASTS ||
+    feedType === HomeFeedType.FOOD ||
+    feedType === HomeFeedType.WRITERS
+  ) {
     return <ArrowTrendingUpIcon className="size-8" />;
   }
 
@@ -49,12 +57,29 @@ const getEmptyIcon = (feedType: HomeFeedType) => {
 };
 
 const ZoraFeed = () => {
-  const { feedType, viewMode } = useHomeTabStore();
+  const { feedType, sortMode, toggleViewMode, viewMode } = useHomeTabStore();
   const currentFeed = zoraHomeFeedConfig[feedType];
   const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(
     null
   );
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const isGridView = viewMode === HomeFeedView.GRID;
+  const shouldRenderMobileReel = isMobileViewport && !isGridView;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    updateViewport();
+
+    mediaQuery.addEventListener("change", updateViewport);
+
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
 
   const {
     data,
@@ -93,8 +118,14 @@ const ZoraFeed = () => {
   });
 
   const items = useMemo(
-    () => data?.pages.flatMap((page) => page.items) ?? [],
-    [data?.pages]
+    () =>
+      [...(data?.pages.flatMap((page) => page.items) ?? [])].sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+        return sortMode === HomeFeedSort.OLDEST ? aTime - bTime : bTime - aTime;
+      }),
+    [data?.pages, sortMode]
   );
 
   const suggestions = useMemo(() => {
@@ -166,13 +197,27 @@ const ZoraFeed = () => {
     );
   }
 
+  if (shouldRenderMobileReel) {
+    return (
+      <ZoraPostMobileViewer
+        hasNextPage={Boolean(hasNextPage)}
+        initialIndex={0}
+        isFetchingMore={isFetchingNextPage}
+        items={items}
+        onClose={toggleViewMode}
+        onRequestMore={handleLoadMore}
+        variant="embedded"
+      />
+    );
+  }
+
   return (
     <>
       <section
         className={cn(
           "min-w-0 overflow-x-hidden pb-5",
           isGridView
-            ? "grid grid-cols-2 gap-3 px-4 md:grid-cols-3 md:px-0"
+            ? "grid grid-cols-2 gap-2 px-3 md:grid-cols-4 md:gap-2.5 md:px-0 lg:grid-cols-6"
             : "space-y-3"
         )}
       >
@@ -181,7 +226,9 @@ const ZoraFeed = () => {
               <ZoraPostCard
                 item={item}
                 key={item.id}
-                onOpenMobileView={() => handleOpenMobileView(index)}
+                onOpenMobileView={
+                  isGridView ? undefined : () => handleOpenMobileView(index)
+                }
                 viewMode={viewMode}
               />
             ))

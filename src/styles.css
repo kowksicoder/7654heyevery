@@ -168,4 +168,62 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+
+  .every1-toast {
+    max-width: min(360px, calc(100vw - 24px));
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, #d1d5db 70%, transparent);
+    border-radius: 18px;
+    box-shadow: none;
+  }
+
+  .every1-toast [data-icon] {
+    transform: scale(0.9);
+  }
+
+  .every1-toast [data-title] {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25rem;
+  }
+
+  .every1-toast [data-description] {
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1rem;
+    opacity: 0.8;
+  }
+
+  .every1-toast [data-close-button] {
+    width: 22px;
+    height: 22px;
+  }
+
+  @media (max-width: 767px) {
+    .every1-toast {
+      max-width: calc(100vw - 16px);
+      min-height: unset;
+      padding: 8px 10px;
+      border-radius: 16px;
+    }
+
+    .every1-toast [data-title] {
+      font-size: 12px;
+      line-height: 1rem;
+    }
+
+    .every1-toast [data-description] {
+      font-size: 10px;
+      line-height: 0.9rem;
+    }
+
+    .every1-toast [data-icon] {
+      transform: scale(0.82);
+    }
+
+    .every1-toast [data-close-button] {
+      width: 20px;
+      height: 20px;
+    }
+  }
 }

@@ -8,11 +8,14 @@ import {
   PaperAirplaneIcon
 } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
+import type { MouseEvent } from "react";
+import { Link, useNavigate } from "react-router";
 import { Card, Image } from "@/components/Shared/UI";
 import { DEFAULT_AVATAR } from "@/data/constants";
 import { HomeFeedView } from "@/data/enums";
 import cn from "@/helpers/cn";
 import formatAddress from "@/helpers/formatAddress";
+import getCoinPath from "@/helpers/getCoinPath";
 import nFormatter from "@/helpers/nFormatter";
 import truncateByWords from "@/helpers/truncateByWords";
 import type { ZoraFeedItem } from "./zoraHomeFeedConfig";
@@ -160,7 +163,7 @@ const ActionButton = ({
   <button
     className={cn(
       "inline-flex items-center gap-1.5 rounded-full text-gray-500 text-sm transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-100",
-      compact ? "px-1.5 py-1.5" : "px-2.5 py-2",
+      compact ? "px-1 py-1 md:px-1.5 md:py-1" : "px-2.5 py-2",
       align === "right" ? "justify-center" : undefined
     )}
     onClick={(event) => {
@@ -173,7 +176,7 @@ const ActionButton = ({
       <span
         className={cn(
           "font-semibold tabular-nums",
-          compact ? "text-[10px]" : "text-[12px]"
+          compact ? "text-[9px] md:text-[10px]" : "text-[12px]"
         )}
       >
         {nFormatter(count, 1) || "0"}
@@ -193,6 +196,7 @@ const ZoraPostCard = ({
   onOpenMobileView?: () => void;
   viewMode?: HomeFeedView;
 }) => {
+  const navigate = useNavigate();
   const isGridView = viewMode === HomeFeedView.GRID;
   const previewImage = getPreviewImage(item);
   const delta = Number.parseFloat(item.marketCapDelta24h ?? "0");
@@ -203,6 +207,20 @@ const ZoraPostCard = ({
     : formatAddress(item.address);
   const { commentCount, likeCount, shareCount } = getActionCounts(item);
   const caption = item.description?.trim();
+  const coinPath = getCoinPath(item.address);
+  const handleCoinNavigation = (event: MouseEvent<HTMLElement>) => {
+    if (!coinPath || typeof window === "undefined") {
+      return;
+    }
+
+    if (!isGridView && !window.matchMedia("(min-width: 768px)").matches) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    navigate(coinPath);
+  };
 
   return (
     <Card
@@ -211,14 +229,12 @@ const ZoraPostCard = ({
         isGridView ? "h-full" : undefined
       )}
       forceRounded={isGridView}
-      onClick={() => {
-        onOpenMobileView?.();
-      }}
+      onClick={onOpenMobileView}
     >
       <div
         className={cn(
           isGridView
-            ? "px-2.5 pt-2.5 pb-2 md:px-3 md:pt-3 md:pb-2.5"
+            ? "px-2 pt-2 pb-1.5 md:px-2.5 md:pt-2.5 md:pb-2"
             : "px-4 pt-4 pb-3"
         )}
       >
@@ -233,22 +249,24 @@ const ZoraPostCard = ({
               alt={creatorName}
               className={cn(
                 "shrink-0 rounded-full border border-white object-cover ring-1 ring-gray-300/90 ring-offset-1 ring-offset-white dark:border-black dark:ring-gray-700 dark:ring-offset-black",
-                isGridView ? "size-7 md:size-8" : "size-11"
+                isGridView ? "size-5 md:size-[1.375rem]" : "size-11"
               )}
-              height={isGridView ? 28 : 44}
+              height={isGridView ? 20 : 44}
               src={getCreatorAvatar(item)}
-              width={isGridView ? 28 : 44}
+              width={isGridView ? 20 : 44}
             />
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <p
+                <button
                   className={cn(
-                    "truncate font-semibold text-gray-950 dark:text-gray-50",
-                    isGridView ? "text-[12px] md:text-[13px]" : "text-sm"
+                    "truncate font-semibold text-gray-950 transition-colors hover:text-emerald-600 dark:text-gray-50 dark:hover:text-emerald-400",
+                    isGridView ? "text-[11px] md:text-[12px]" : "text-sm"
                   )}
+                  onClick={handleCoinNavigation}
+                  type="button"
                 >
                   {item.symbol ? `$${item.symbol}` : "Coin"}
-                </p>
+                </button>
                 {isGridView ? null : (
                   <span
                     className={cn(
@@ -262,14 +280,16 @@ const ZoraPostCard = ({
                   </span>
                 )}
               </div>
-              <div
-                className={cn(
-                  "mt-0.5 flex min-w-0 items-center text-gray-500 dark:text-gray-400",
-                  isGridView ? "text-[9px] md:text-[10px]" : "text-[11px]"
-                )}
-              >
-                <span className="truncate">{timestamp}</span>
-              </div>
+              {isGridView ? null : (
+                <div
+                  className={cn(
+                    "mt-0.5 flex min-w-0 items-center text-gray-500 dark:text-gray-400",
+                    "text-[11px]"
+                  )}
+                >
+                  <span className="truncate">{timestamp}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -305,47 +325,69 @@ const ZoraPostCard = ({
       {previewImage ? (
         <div
           className={cn(
-            isGridView ? "px-2.5 pb-2 md:px-3 md:pb-2.5" : "px-4 pb-3"
+            isGridView ? "px-2 pb-1.5 md:px-2.5 md:pb-2" : "px-4 pb-3"
           )}
         >
-          <div
+          <button
             className={cn(
-              "relative overflow-hidden bg-gray-100 dark:bg-gray-900",
+              "relative block w-full overflow-hidden bg-gray-100 transition-transform hover:scale-[1.01] dark:bg-gray-900",
               isGridView
-                ? "rounded-[0.9rem] md:rounded-[1rem]"
+                ? "rounded-[0.8rem] md:rounded-[0.9rem]"
                 : "rounded-[1.5rem]"
             )}
+            onClick={handleCoinNavigation}
+            type="button"
           >
             <Image
               alt={item.name}
               className={cn(
                 "w-full max-w-full object-cover",
                 isGridView
-                  ? "aspect-[6/5] md:aspect-square"
+                  ? "aspect-[6/5] md:aspect-[0.96]"
                   : "aspect-square md:aspect-[4/3]"
               )}
               src={previewImage}
             />
-          </div>
+          </button>
         </div>
       ) : null}
 
       {isGridView ? (
-        <div className="px-2.5 pb-2 md:px-3 md:pb-2.5">
-          <div className="grid grid-cols-2 gap-1 font-semibold text-[9px] text-gray-500 md:text-[10px] dark:text-gray-400">
-            <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.75 md:px-2 md:py-1 dark:bg-gray-900">
+        <div className="px-2 pb-1.5 md:px-2.5 md:pb-2">
+          <div className="flex items-center gap-1.5 font-semibold text-[9px] text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.75 md:px-1.5 md:py-0.75 dark:bg-gray-900">
               MC {formatUsdMetric(item.marketCap)}
             </span>
-            <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-1.5 py-0.75 md:px-2 md:py-1 dark:bg-gray-900">
-              V {formatUsdMetric(item.volume24h)}
-            </span>
+            {coinPath ? (
+              <Link
+                className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-1.5 py-0.75 font-semibold text-[9px] text-white transition-colors hover:bg-emerald-600"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                to={coinPath}
+              >
+                Trade
+              </Link>
+            ) : null}
           </div>
         </div>
       ) : (
         <div className="hidden px-4 pb-3 md:block">
           <div className="flex flex-wrap gap-2">
             <MetaPill label="MCap" value={formatUsdMetric(item.marketCap)} />
-            <MetaPill label="Vol" value={formatUsdMetric(item.volume24h)} />
+            {coinPath ? (
+              <Link
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 font-semibold text-[11px] text-white transition-colors hover:bg-emerald-600"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                to={coinPath}
+              >
+                Trade
+              </Link>
+            ) : (
+              <MetaPill label="Vol" value={formatUsdMetric(item.volume24h)} />
+            )}
             <MetaPill
               label="Holders"
               value={nFormatter(item.uniqueHolders ?? 0, 2) || "0"}
@@ -380,34 +422,8 @@ const ZoraPostCard = ({
         </div>
       )}
 
-      <div
-        className={cn(
-          "border-gray-200 border-t dark:border-gray-800",
-          isGridView ? "px-1.5 py-1 md:px-2 md:py-1.5" : "px-2 py-2"
-        )}
-      >
-        {isGridView ? (
-          <div className="grid grid-cols-3 gap-0.5">
-            <ActionButton
-              compact
-              count={likeCount}
-              Icon={HeartIcon}
-              label="Like"
-            />
-            <ActionButton
-              compact
-              count={commentCount}
-              Icon={ChatBubbleOvalLeftEllipsisIcon}
-              label="Comment"
-            />
-            <ActionButton
-              compact
-              count={shareCount}
-              Icon={PaperAirplaneIcon}
-              label="Share"
-            />
-          </div>
-        ) : (
+      {isGridView ? null : (
+        <div className="border-gray-200 border-t px-2 py-2 dark:border-gray-800">
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1">
               <ActionButton count={likeCount} Icon={HeartIcon} label="Like" />
@@ -441,8 +457,8 @@ const ZoraPostCard = ({
               <ActionButton align="right" Icon={BookmarkIcon} label="Save" />
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {isGridView ? null : (
         <div className="min-w-0 max-w-full px-4 pb-4 md:hidden">

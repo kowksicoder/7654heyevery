@@ -1,11 +1,8 @@
 import BackButton from "@/components/Shared/BackButton";
 import NotLoggedIn from "@/components/Shared/NotLoggedIn";
 import PageLayout from "@/components/Shared/PageLayout";
-import ProFeatureNotice from "@/components/Shared/ProFeatureNotice";
 import { Card, CardHeader } from "@/components/Shared/UI";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import BetaToggle from "./BetaToggle";
-import DefaultToNameToggle from "./DefaultToNameToggle";
 
 const ProSettings = () => {
   const { currentAccount } = useAccountStore();
@@ -18,16 +15,15 @@ const ProSettings = () => {
     <PageLayout title="Pro settings">
       <Card>
         <CardHeader icon={<BackButton path="/settings" />} title="Pro" />
-        {currentAccount.hasSubscribed ? (
-          <div>
-            <div className="space-y-5 p-5">
-              <BetaToggle />
-              <DefaultToNameToggle />
-            </div>
-          </div>
-        ) : (
-          <ProFeatureNotice className="m-5" feature="pro settings" />
-        )}
+        <div className="space-y-3 p-5">
+          <p className="font-medium text-gray-900 text-sm dark:text-gray-100">
+            Pro account controls are being rebuilt for the Privy migration.
+          </p>
+          <p className="text-gray-500 text-sm dark:text-gray-400">
+            The old Lens-linked pro toggles are temporarily disabled while we
+            move premium settings into Every1-owned account data.
+          </p>
+        </div>
       </Card>
     </PageLayout>
   );

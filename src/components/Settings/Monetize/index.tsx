@@ -1,10 +1,8 @@
 import BackButton from "@/components/Shared/BackButton";
 import NotLoggedIn from "@/components/Shared/NotLoggedIn";
 import PageLayout from "@/components/Shared/PageLayout";
-import ProFeatureNotice from "@/components/Shared/ProFeatureNotice";
 import { Card, CardHeader } from "@/components/Shared/UI";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import SuperFollow from "./SuperFollow";
 
 const MonetizeSettings = () => {
   const { currentAccount } = useAccountStore();
@@ -15,17 +13,18 @@ const MonetizeSettings = () => {
 
   return (
     <PageLayout title="Monetize settings">
-      {currentAccount?.hasSubscribed ? (
-        <SuperFollow />
-      ) : (
-        <Card>
-          <CardHeader
-            icon={<BackButton path="/settings" />}
-            title="Super Follow"
-          />
-          <ProFeatureNotice className="m-5" feature="super follow settings" />
-        </Card>
-      )}
+      <Card>
+        <CardHeader icon={<BackButton path="/settings" />} title="Monetize" />
+        <div className="space-y-3 p-5">
+          <p className="font-medium text-gray-900 text-sm dark:text-gray-100">
+            Monetization controls are being rebuilt for the Privy migration.
+          </p>
+          <p className="text-gray-500 text-sm dark:text-gray-400">
+            Legacy super follow settings are temporarily disabled while we move
+            paid features to Every1-owned account data.
+          </p>
+        </div>
+      </Card>
     </PageLayout>
   );
 };

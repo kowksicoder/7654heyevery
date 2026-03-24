@@ -1,12 +1,12 @@
+import { CheckBadgeIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { memo } from "react";
 import { Link } from "react-router";
-import Markup from "@/components/Shared/Markup";
 import { Image } from "@/components/Shared/UI";
-import { TRANSFORMS } from "@/data/constants";
-import getAvatar from "@/helpers//getAvatar";
 import cn from "@/helpers/cn";
-import getMentions from "@/helpers/getMentions";
-import type { GroupFragment } from "@/indexer/generated";
+import type {
+  Every1CommunityDetails,
+  Every1CommunitySummary
+} from "@/types/every1";
 import JoinLeaveButton from "./JoinLeaveButton";
 
 interface SingleGroupProps {
@@ -15,8 +15,12 @@ interface SingleGroupProps {
   isBig?: boolean;
   linkToGroup?: boolean;
   showDescription?: boolean;
-  group: GroupFragment;
+  community: Every1CommunityDetails | Every1CommunitySummary;
 }
+
+const getCommunityAvatar = (
+  community: Every1CommunityDetails | Every1CommunitySummary
+) => community.avatarUrl || community.ownerAvatarUrl || null;
 
 const SingleGroup = ({
   hideJoinButton = false,
@@ -24,52 +28,67 @@ const SingleGroup = ({
   isBig = false,
   linkToGroup = true,
   showDescription = false,
-  group
+  community
 }: SingleGroupProps) => {
   const GroupAvatar = () => (
-    <Image
-      alt={group.address}
+    <div
       className={cn(
-        isBig ? "size-14" : "size-11",
-        "rounded-lg border border-gray-200 bg-gray-200 dark:border-gray-700"
+        isBig ? "size-14 rounded-xl" : "size-11 rounded-lg",
+        "flex shrink-0 items-center justify-center overflow-hidden bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-300"
       )}
-      height={isBig ? 56 : 44}
-      loading="lazy"
-      src={getAvatar(group, TRANSFORMS.AVATAR_BIG)}
-      width={isBig ? 56 : 44}
-    />
+    >
+      {getCommunityAvatar(community) ? (
+        <Image
+          alt={community.name}
+          className="size-full object-cover"
+          src={getCommunityAvatar(community) as string}
+        />
+      ) : (
+        <UserGroupIcon className={cn(isBig ? "size-7" : "size-5")} />
+      )}
+    </div>
   );
 
   const GroupInfo = () => (
-    <div className="mr-8 flex items-center space-x-3">
+    <div className="mr-6 flex min-w-0 items-center gap-3">
       <GroupAvatar />
-      <div>
-        <div className="truncate font-semibold">{group.metadata?.name}</div>
-        {showDescription && group.metadata?.description && (
-          <div
-            className="linkify mt-2 text-base leading-6"
-            style={{ wordBreak: "break-word" }}
-          >
-            <Markup mentions={getMentions(group.metadata.description)}>
-              {group.metadata.description}
-            </Markup>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="truncate font-semibold text-gray-950 dark:text-white">
+            {community.name}
           </div>
-        )}
+          {community.verificationStatus === "verified" ? (
+            <CheckBadgeIcon className="size-4 shrink-0 text-emerald-500" />
+          ) : null}
+          <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 uppercase tracking-[0.14em] dark:bg-gray-900 dark:text-gray-400">
+            {community.memberCount} members
+          </span>
+        </div>
+        <div className="mt-1 text-gray-500 text-sm dark:text-gray-400">
+          @{community.slug}
+        </div>
+        {showDescription && community.description ? (
+          <div className="mt-2 line-clamp-2 text-gray-600 text-sm dark:text-gray-400">
+            {community.description}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-3">
       {linkToGroup ? (
-        <Link to={`/g/${group.address}`}>
+        <Link className="min-w-0 flex-1" to={`/g/${community.slug}`}>
           <GroupInfo />
         </Link>
       ) : (
-        <GroupInfo />
+        <div className="min-w-0 flex-1">
+          <GroupInfo />
+        </div>
       )}
       <JoinLeaveButton
-        group={group}
+        community={community}
         hideJoinButton={hideJoinButton}
         hideLeaveButton={hideLeaveButton}
         small

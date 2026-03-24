@@ -1,18 +1,20 @@
 import { ApolloLink, fromPromise, toPromise } from "@apollo/client";
-import { hydrateAuthTokens, signOut } from "@/store/persisted/useAuthStore";
+import {
+  clearAuthTokens,
+  hydrateAuthTokens
+} from "@/store/persisted/useAuthStore";
 import { isTokenExpiringSoon, refreshTokens } from "./tokenManager";
 
 const authLink = new ApolloLink((operation, forward) => {
   const { accessToken, refreshToken } = hydrateAuthTokens();
 
-  if (!accessToken || !refreshToken) {
-    signOut();
+  if (!accessToken) {
     return forward(operation);
   }
 
   const isExpiringSoon = isTokenExpiringSoon(accessToken);
 
-  if (!isExpiringSoon) {
+  if (!isExpiringSoon || !refreshToken) {
     operation.setContext({
       headers: { "X-Access-Token": accessToken }
     });
@@ -28,7 +30,10 @@ const authLink = new ApolloLink((operation, forward) => {
         });
         return toPromise(forward(operation));
       })
-      .catch(() => toPromise(forward(operation)))
+      .catch(() => {
+        clearAuthTokens();
+        return toPromise(forward(operation));
+      })
   );
 });
 

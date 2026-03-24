@@ -1,4 +1,5 @@
 import { ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
+import { usePrivy } from "@privy-io/react-auth";
 import cn from "@/helpers/cn";
 import errorToast from "@/helpers/errorToast";
 import reloadAllTabs from "@/helpers/reloadAllTabs";
@@ -10,10 +11,13 @@ interface LogoutProps {
 }
 
 const Logout = ({ className = "", onClick }: LogoutProps) => {
+  const { logout } = usePrivy();
+
   const handleLogout = async () => {
     try {
       umami.track("logout");
-      signOut();
+      await logout();
+      await signOut();
       reloadAllTabs();
     } catch (error) {
       errorToast(error);

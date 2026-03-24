@@ -64,5 +64,41 @@ export const zoraHomeFeedConfig: Record<HomeFeedType, ZoraHomeFeedConfigItem> =
       errorTitle: "Failed to load pop-culture creator posts",
       label: "Pop-Culture",
       query: getCoinsLastTradedUnique
+    },
+    [HomeFeedType.PODCASTS]: {
+      emptyMessage: "No podcast creator posts yet!",
+      errorTitle: "Failed to load podcast creator posts",
+      label: "Podcasts",
+      query: getExploreTopVolumeAll24h
+    },
+    [HomeFeedType.PHOTOGRAPHY]: {
+      emptyMessage: "No photography creator posts yet!",
+      errorTitle: "Failed to load photography creator posts",
+      label: "Photography",
+      query: getExploreNewAll
+    },
+    [HomeFeedType.FOOD]: {
+      emptyMessage: "No food creator posts yet!",
+      errorTitle: "Failed to load food creator posts",
+      label: "Food",
+      query: getCoinsTopGainers
+    },
+    [HomeFeedType.WRITERS]: {
+      emptyMessage: "No writer creator posts yet!",
+      errorTitle: "Failed to load writer creator posts",
+      label: "Writers",
+      query: getCoinsMostValuable
+    },
+    [HomeFeedType.COMMUNITIES]: {
+      emptyMessage: "No community creator posts yet!",
+      errorTitle: "Failed to load community creator posts",
+      label: "Communities",
+      query: getCoinsLastTraded
+    },
+    [HomeFeedType.COMEDIANS]: {
+      emptyMessage: "No comedian creator posts yet!",
+      errorTitle: "Failed to load comedian creator posts",
+      label: "Comedians",
+      query: getCoinsLastTradedUnique
     }
   };

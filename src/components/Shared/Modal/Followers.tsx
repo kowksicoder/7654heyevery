@@ -6,33 +6,58 @@ import SingleAccount from "@/components/Shared/Account/SingleAccount";
 import AccountListShimmer from "@/components/Shared/Shimmer/AccountListShimmer";
 import { EmptyState, ErrorMessage } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
+import { buildAccountFromEvery1Profile } from "@/helpers/privy";
+import useEvery1FollowList from "@/hooks/useEvery1FollowList";
 import useLoadMoreOnIntersect from "@/hooks/useLoadMoreOnIntersect";
 import type { FollowersRequest } from "@/indexer/generated";
 import { PageSize, useFollowersQuery } from "@/indexer/generated";
-import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { accountsList } from "@/variants";
 
 interface FollowersProps {
+  profileId?: null | string;
   username: string;
   address: string;
 }
 
-const Followers = ({ username, address }: FollowersProps) => {
-  const { currentAccount } = useAccountStore();
-
+const Followers = ({ username, address, profileId }: FollowersProps) => {
   const request: FollowersRequest = {
     account: address,
     pageSize: PageSize.Fifty
   };
+  const {
+    data: every1Followers,
+    error: every1Error,
+    isLoading: loadingEvery1Followers
+  } = useEvery1FollowList({
+    limit: 100,
+    mode: "followers",
+    profileId
+  });
 
   const { data, error, fetchMore, loading } = useFollowersQuery({
-    skip: !address,
+    skip: Boolean(profileId) || !address,
     variables: { request }
   });
 
-  const followers = data?.followers?.items;
+  const followers = profileId
+    ? every1Followers?.map((follower) =>
+        buildAccountFromEvery1Profile({
+          avatarUrl: follower.avatarUrl,
+          bannerUrl: follower.bannerUrl,
+          bio: follower.bio,
+          displayName: follower.displayName,
+          e1xpTotal: 0,
+          id: follower.id,
+          lensAccountAddress: follower.lensAccountAddress,
+          referralCode: null,
+          username: follower.username,
+          walletAddress: follower.walletAddress,
+          zoraHandle: follower.zoraHandle
+        })
+      )
+    : data?.followers?.items.map((follower) => follower.follower);
   const pageInfo = data?.followers?.pageInfo;
-  const hasMore = pageInfo?.next;
+  const hasMore = !profileId && pageInfo?.next;
 
   const handleEndReached = useCallback(async () => {
     if (hasMore) {
@@ -44,7 +69,7 @@ const Followers = ({ username, address }: FollowersProps) => {
 
   const loadMoreRef = useLoadMoreOnIntersect(handleEndReached);
 
-  if (loading) {
+  if ((profileId && loadingEvery1Followers) || (!profileId && loading)) {
     return <AccountListShimmer />;
   }
 
@@ -63,11 +88,11 @@ const Followers = ({ username, address }: FollowersProps) => {
     );
   }
 
-  if (error) {
+  if (profileId ? every1Error : error) {
     return (
       <ErrorMessage
         className="m-5"
-        error={error}
+        error={(profileId ? every1Error : error) as Error}
         title="Failed to load followers"
       />
     );
@@ -84,20 +109,10 @@ const Followers = ({ username, address }: FollowersProps) => {
               index === followers.length - 1 && "border-b-0"
             )}
             initial="hidden"
-            key={follower.follower.address}
+            key={follower.address}
             variants={accountsList}
           >
-            <SingleAccount
-              account={follower.follower}
-              hideFollowButton={
-                currentAccount?.address === follower.follower.address
-              }
-              hideUnfollowButton={
-                currentAccount?.address === follower.follower.address
-              }
-              showBio
-              showUserPreview={false}
-            />
+            <SingleAccount account={follower} showBio showUserPreview={false} />
           </motion.div>
         ))}
         {hasMore && <span ref={loadMoreRef} />}

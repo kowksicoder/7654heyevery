@@ -4,12 +4,23 @@ export enum HomeFeedType {
   HIGHLIGHTS = "HIGHLIGHTS",
   SPORTS = "SPORTS",
   LIFESTYLE = "LIFESTYLE",
-  POP_CULTURE = "POP_CULTURE"
+  POP_CULTURE = "POP_CULTURE",
+  PODCASTS = "PODCASTS",
+  PHOTOGRAPHY = "PHOTOGRAPHY",
+  FOOD = "FOOD",
+  WRITERS = "WRITERS",
+  COMMUNITIES = "COMMUNITIES",
+  COMEDIANS = "COMEDIANS"
 }
 
 export enum HomeFeedView {
   LIST = "LIST",
   GRID = "GRID"
+}
+
+export enum HomeFeedSort {
+  LATEST = "LATEST",
+  OLDEST = "OLDEST"
 }
 
 export enum AccountFeedType {
@@ -28,6 +39,7 @@ export enum NotificationFeedType {
 }
 
 export enum GroupsFeedType {
+  Discover = "DISCOVER",
   Managed = "MANAGED",
   Member = "MEMBER"
 }

@@ -4,28 +4,107 @@ import {
   InformationCircleIcon,
   PhotoIcon
 } from "@heroicons/react/24/outline";
+import {
+  createCoin,
+  createMetadataBuilder,
+  createZoraUploaderForCreator,
+  setApiKey
+} from "@zoralabs/coins-sdk";
 import type { ChangeEvent } from "react";
-import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { toast } from "sonner";
+import type { Address } from "viem";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { useAccount, useConfig, useWalletClient } from "wagmi";
+import { getWalletClient } from "wagmi/actions";
 import evLogo from "@/assets/fonts/evlogo.jpg";
 import MetaTags from "@/components/Common/MetaTags";
+import { BASE_RPC_URL, ZORA_API_KEY } from "@/data/constants";
 import cn from "@/helpers/cn";
+import { getSupabaseClient, hasSupabaseConfig } from "@/helpers/supabase";
+import useHandleWrongNetwork from "@/hooks/useHandleWrongNetwork";
+import useOpenAuth from "@/hooks/useOpenAuth";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
+
+setApiKey(ZORA_API_KEY);
+
+const CREATE_BANNER_IMAGE =
+  "https://i.pinimg.com/736x/81/95/3d/81953df1510811e814ceafc09bd7280e.jpg";
+const NAIRA_SYMBOL = "\u20A6";
+
+type CreateTab = "community" | "creator";
+
+const slugifyValue = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
 
 const Create = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const initialTab =
+    searchParams.get("tab") === "community" ? "community" : "creator";
+  const { address } = useAccount();
+  const config = useConfig();
+  const { data: walletClient } = useWalletClient({ chainId: base.id });
+  const { profile } = useEvery1Store();
+  const openAuth = useOpenAuth();
+  const handleWrongNetwork = useHandleWrongNetwork();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const didApplyPrefill = useRef(false);
+
+  const [activeTab, setActiveTab] = useState<CreateTab>(initialTab);
   const [ticker, setTicker] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [showFeeSheet, setShowFeeSheet] = useState(false);
-  const [mobileStep, setMobileStep] = useState<"ticker" | "form">("ticker");
+  const [mobileStep, setMobileStep] = useState<"form" | "ticker">("ticker");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canSubmit = Boolean(filePreviewUrl && ticker.trim() && name.trim());
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain: base,
+        transport: http(BASE_RPC_URL, { batch: { batchSize: 30 } })
+      }),
+    []
+  );
+
+  const isCommunity = activeTab === "community";
   const hasTicker = Boolean(ticker.trim());
-  const previewTicker = ticker.trim() || "Creator";
+  const canSubmit = Boolean(selectedFile && ticker.trim() && name.trim());
+  const previewTicker =
+    ticker.trim() || (isCommunity ? "community" : "creator");
+  const previewCurrencyTicker = `${NAIRA_SYMBOL}${previewTicker}`;
+  const previewImage = filePreviewUrl || CREATE_BANNER_IMAGE;
+  const topCopy = isCommunity
+    ? {
+        actionLabel: "Create community coin",
+        availabilityLabel: "Community coin ready",
+        heroTitle: "Launch a community coin",
+        introTitle: "Publish the coin and the community together.",
+        postDestination: "Community hub + Every1 Feed",
+        previewBody:
+          "Your community coin launches with its group already linked and ready for members."
+      }
+    : {
+        actionLabel: "Create coin",
+        availabilityLabel: "Creator coin ready",
+        heroTitle: "Launch a creator coin",
+        introTitle: "Upload from gallery and finish everything on one form.",
+        postDestination: "Every1 Feed",
+        previewBody:
+          "A tighter desktop canvas for ticker, cover, caption, and launch."
+      };
+
   useEffect(() => {
     return () => {
       if (filePreviewUrl?.startsWith("blob:")) {
@@ -65,6 +144,11 @@ const Create = () => {
       : (window.location.href = "/");
   };
 
+  const handleSelectTab = (nextTab: CreateTab) => {
+    setActiveTab(nextTab);
+    setMobileStep("ticker");
+  };
+
   const handleTickerChange = (value: string) => {
     setTicker(
       value
@@ -98,15 +182,200 @@ const Create = () => {
     }
 
     const nextPreviewUrl = URL.createObjectURL(file);
+    setSelectedFile(file);
     setFileName(file.name);
     setFilePreviewUrl(nextPreviewUrl);
+  };
+
+  const persistCreatorLaunch = async ({
+    coinAddress,
+    coverImageUrl,
+    metadataUri
+  }: {
+    coinAddress: string;
+    coverImageUrl: null | string;
+    metadataUri: string;
+  }) => {
+    if (!profile?.id) {
+      throw new Error(
+        "Finish your Every1 profile setup before creating a coin."
+      );
+    }
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("create_creator_coin_launch", {
+      input_chain_id: base.id,
+      input_coin_address: coinAddress,
+      input_cover_image_url: coverImageUrl,
+      input_created_by_profile_id: profile.id,
+      input_description: description.trim() || null,
+      input_metadata_uri: metadataUri,
+      input_name: name.trim(),
+      input_post_destination: "every1_feed",
+      input_supply: 10000000,
+      input_ticker: ticker.trim()
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as null | { coinAddress?: null | string };
+  };
+
+  const persistCommunityLaunch = async ({
+    coinAddress,
+    coverImageUrl,
+    metadataUri
+  }: {
+    coinAddress: string;
+    coverImageUrl: null | string;
+    metadataUri: string;
+  }) => {
+    if (!profile?.id) {
+      throw new Error(
+        "Finish your Every1 profile setup before creating a community coin."
+      );
+    }
+
+    const slug = slugifyValue(name.trim()) || slugifyValue(ticker.trim());
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("create_community_coin_launch", {
+      input_chain_id: base.id,
+      input_coin_address: coinAddress,
+      input_coin_description: description.trim() || null,
+      input_coin_name: name.trim(),
+      input_community_description: description.trim() || null,
+      input_community_name: name.trim(),
+      input_community_slug: slug,
+      input_cover_image_url: coverImageUrl,
+      input_metadata_uri: metadataUri,
+      input_owner_profile_id: profile.id,
+      input_supply: 10000000,
+      input_ticker: ticker.trim(),
+      input_visibility: "public"
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as null | { slug?: null | string };
+  };
+
+  const handleSubmit = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!address) {
+      await openAuth("create_coin");
+      return;
+    }
+
+    if (!canSubmit || !selectedFile) {
+      toast.error("Add a ticker, name, and image before continuing.");
+      return;
+    }
+
+    if (!hasSupabaseConfig()) {
+      toast.error("App configuration is incomplete right now.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await handleWrongNetwork({ chainId: base.id });
+      const client =
+        (await getWalletClient(config, { chainId: base.id })) || walletClient;
+
+      if (!client) {
+        throw new Error("Connect your wallet on Base to create a coin.");
+      }
+
+      const metadataUpload = await createMetadataBuilder()
+        .withName(name.trim())
+        .withSymbol(ticker.trim().toUpperCase())
+        .withDescription(
+          description.trim() ||
+            `${name.trim()} ${
+              isCommunity ? "community coin" : "creator coin"
+            } is live on Every1.`
+        )
+        .withImage(selectedFile)
+        .upload(createZoraUploaderForCreator(address as Address));
+
+      const createdCoin = await createCoin({
+        call: {
+          chainId: base.id,
+          creator: address,
+          currency: "ETH",
+          metadata: metadataUpload.createMetadataParameters.metadata,
+          name: name.trim(),
+          symbol: ticker.trim().toUpperCase()
+        },
+        options: {
+          account: client.account,
+          skipValidateTransaction: true
+        },
+        publicClient,
+        walletClient: client
+      });
+
+      const deployedCoinAddress =
+        createdCoin.address || createdCoin.deployment?.coin || null;
+
+      if (!deployedCoinAddress) {
+        throw new Error(
+          "Coin deployed, but the address could not be resolved."
+        );
+      }
+
+      if (isCommunity) {
+        const result = await persistCommunityLaunch({
+          coinAddress: deployedCoinAddress,
+          coverImageUrl: metadataUpload.metadata.image || null,
+          metadataUri: metadataUpload.url
+        });
+
+        toast.success("Community coin created", {
+          description: "Your coin and community are live together now."
+        });
+
+        navigate(`/g/${result?.slug || slugifyValue(name.trim())}?created=1`);
+      } else {
+        await persistCreatorLaunch({
+          coinAddress: deployedCoinAddress,
+          coverImageUrl: metadataUpload.metadata.image || null,
+          metadataUri: metadataUpload.url
+        });
+
+        toast.success("Coin created", {
+          description: "Your launch is live and ready to share."
+        });
+
+        navigate(`/coins/${deployedCoinAddress}?created=1`);
+      }
+    } catch (error) {
+      toast.error(
+        isCommunity
+          ? "Failed to create community coin"
+          : "Failed to create coin",
+        {
+          description:
+            error instanceof Error ? error.message : "Please try again."
+        }
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderCreateForm = ({
     desktop = false,
     showIntro = true,
     showTickerField = true,
-    submitLabel = "Create coin"
+    submitLabel = topCopy.actionLabel
   }: {
     desktop?: boolean;
     showIntro?: boolean;
@@ -117,18 +386,18 @@ const Create = () => {
       className={cn(
         "border border-gray-200 bg-white shadow-sm dark:border-white/8 dark:bg-[#111214] dark:shadow-none",
         desktop
-          ? "h-full max-h-[62vh] min-h-[56vh] overflow-y-auto rounded-[30px] p-5"
+          ? "no-scrollbar flex h-full min-h-0 flex-col overflow-y-auto rounded-[28px] p-4"
           : "rounded-[22px] p-2"
       )}
     >
       {showIntro ? (
-        <div className="mb-2 flex flex-col items-center text-center md:mb-3">
+        <div className="mb-2 flex flex-col items-center text-center md:mb-2.5">
           <img
             alt="Every1"
             className={cn(
               "border border-black/5 object-cover dark:border-white/10",
               desktop
-                ? "mb-2 h-10 w-10 rounded-2xl"
+                ? "mb-1.5 h-9 w-9 rounded-2xl"
                 : "mb-1.5 h-8 w-8 rounded-xl"
             )}
             src={evLogo}
@@ -146,10 +415,10 @@ const Create = () => {
           <p
             className={cn(
               "text-balance font-semibold dark:text-white",
-              desktop ? "mt-1 text-2xl" : "mt-0.5 text-sm"
+              desktop ? "mt-0.5 text-[20px] leading-6" : "mt-0.5 text-sm"
             )}
           >
-            Upload from gallery and finish everything on one form.
+            {topCopy.introTitle}
           </p>
         </div>
       ) : null}
@@ -168,7 +437,7 @@ const Create = () => {
             className={cn(
               "flex items-center bg-gray-100 dark:bg-[#1b1c20]",
               desktop
-                ? "rounded-[16px] px-4 py-3.5"
+                ? "rounded-[16px] px-4 py-2.5"
                 : "rounded-[14px] px-2.5 py-2"
             )}
           >
@@ -178,12 +447,12 @@ const Create = () => {
                 desktop ? "text-2xl" : "text-sm"
               )}
             >
-              ₦
+              {NAIRA_SYMBOL}
             </span>
             <input
               className={cn(
                 "w-full border-none bg-transparent p-0 font-semibold text-gray-950 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-white dark:placeholder:text-white/24",
-                desktop ? "text-2xl" : "text-sm"
+                desktop ? "text-[22px]" : "text-sm"
               )}
               onChange={(event) => handleTickerChange(event.target.value)}
               placeholder="ticker"
@@ -197,15 +466,15 @@ const Create = () => {
             Ticker
           </span>
           <p className="mt-1 font-semibold text-gray-950 text-lg dark:text-white">
-            ₦{previewTicker}
+            {previewCurrencyTicker}
           </p>
         </div>
       )}
 
       <div
         className={cn(
-          showTickerField ? (desktop ? "mt-3" : "mt-2") : "",
-          "space-y-2"
+          showTickerField ? (desktop ? "mt-2.5" : "mt-2") : "",
+          desktop ? "space-y-1.5" : "space-y-2"
         )}
       >
         <label className="block">
@@ -215,17 +484,17 @@ const Create = () => {
               desktop ? "mb-1 text-sm" : "mb-0.5 text-[10px]"
             )}
           >
-            Name
+            {isCommunity ? "Coin + community name" : "Name"}
           </span>
           <input
             className={cn(
               "w-full border-none bg-gray-100 font-semibold text-gray-950 outline-none placeholder:text-gray-400 focus:ring-0 dark:bg-[#1b1c20] dark:text-white dark:placeholder:text-white/24",
               desktop
-                ? "rounded-[16px] px-4 py-3.5 text-2xl"
+                ? "rounded-[16px] px-4 py-2.5 text-[22px]"
                 : "rounded-[14px] px-2.5 py-2 text-sm"
             )}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Name"
+            placeholder={isCommunity ? "Community name" : "Name"}
             value={name}
           />
         </label>
@@ -243,11 +512,15 @@ const Create = () => {
             className={cn(
               "w-full resize-none border-none bg-gray-100 text-gray-950 outline-none placeholder:text-gray-400 focus:ring-0 dark:bg-[#1b1c20] dark:text-white dark:placeholder:text-white/24",
               desktop
-                ? "min-h-28 rounded-[16px] px-4 py-3.5 text-base"
+                ? "min-h-20 rounded-[16px] px-4 py-2.5 text-sm"
                 : "min-h-16 rounded-[14px] px-2.5 py-2 text-xs"
             )}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Tell people what this post or drop is about"
+            placeholder={
+              isCommunity
+                ? "What is this community about?"
+                : "Tell people what this post or drop is about"
+            }
             value={description}
           />
         </label>
@@ -256,7 +529,7 @@ const Create = () => {
       <button
         className={cn(
           "w-full overflow-hidden border border-gray-200 bg-gray-100 transition dark:border-white/10 dark:bg-[#18191d]",
-          desktop ? "mt-3 rounded-[18px]" : "mt-2 rounded-[14px]",
+          desktop ? "mt-2.5 rounded-[18px]" : "mt-2 rounded-[14px]",
           filePreviewUrl ? "p-0" : desktop ? "p-3" : "p-2"
         )}
         onClick={handleOpenGallery}
@@ -268,7 +541,7 @@ const Create = () => {
               alt={fileName || "Selected media"}
               className={cn(
                 "w-full object-cover",
-                desktop ? "aspect-[4/4.15]" : "aspect-[4/3.1]"
+                desktop ? "aspect-[4/3.15]" : "aspect-[4/3.1]"
               )}
               src={filePreviewUrl}
             />
@@ -330,7 +603,7 @@ const Create = () => {
                 )}
               />
             </div>
-            <div className={cn(desktop ? "min-w-0 flex-1" : "min-w-0 flex-1")}>
+            <div className="min-w-0 flex-1">
               <p
                 className={cn(
                   "font-medium text-gray-950 dark:text-white",
@@ -345,7 +618,9 @@ const Create = () => {
                   desktop ? "text-xs" : "text-[9px] leading-4"
                 )}
               >
-                Add an image for the post.
+                {isCommunity
+                  ? "Add the image members will see first."
+                  : "Add an image for the post."}
               </p>
             </div>
           </div>
@@ -355,7 +630,7 @@ const Create = () => {
       <div
         className={cn(
           "bg-gray-100 dark:bg-[#1a1b1f]",
-          desktop ? "mt-3 rounded-[18px] p-4" : "mt-2.5 rounded-[16px] p-2.5"
+          desktop ? "mt-2.5 rounded-[18px] p-4" : "mt-2.5 rounded-[16px] p-2.5"
         )}
       >
         <div
@@ -376,7 +651,9 @@ const Create = () => {
           )}
         >
           <span className="text-gray-600 dark:text-white/72">Post to</span>
-          <span className="text-gray-900 dark:text-white/88">Every1 Feed</span>
+          <span className="text-right text-gray-900 dark:text-white/88">
+            {topCopy.postDestination}
+          </span>
         </div>
         <button
           className={cn(
@@ -402,14 +679,16 @@ const Create = () => {
       <button
         className={cn(
           "w-full rounded-full font-semibold transition",
-          desktop ? "mt-3 px-6 py-4 text-2xl" : "mt-2.5 px-4 py-2.5 text-sm",
-          canSubmit
+          desktop ? "mt-3 px-6 py-3.5 text-xl" : "mt-2.5 px-4 py-2.5 text-sm",
+          canSubmit && !isSubmitting
             ? "bg-gray-950 text-white dark:bg-white dark:text-black"
             : "bg-gray-200 text-gray-400 dark:bg-white/16 dark:text-white/40"
         )}
+        disabled={!canSubmit || isSubmitting}
+        onClick={handleSubmit}
         type="button"
       >
-        {submitLabel}
+        {isSubmitting ? "Creating..." : submitLabel}
       </button>
     </div>
   );
@@ -421,14 +700,19 @@ const Create = () => {
         desktop ? "gap-1.5 p-1.5" : "gap-1 p-1"
       )}
     >
-      <span
+      <button
         className={cn(
-          "rounded-full bg-gray-950 font-medium text-white dark:bg-white dark:text-black",
+          "rounded-full font-medium transition",
+          activeTab === "creator"
+            ? "bg-gray-950 text-white dark:bg-white dark:text-black"
+            : "text-gray-500 hover:text-gray-900 dark:text-white/44 dark:hover:text-white",
           desktop ? "px-3 py-1.5 text-sm" : "px-2.5 py-1 text-[11px]"
         )}
+        onClick={() => handleSelectTab("creator")}
+        type="button"
       >
         Creator
-      </span>
+      </button>
       <span
         className={cn(
           "cursor-not-allowed text-gray-400 dark:text-white/28",
@@ -437,14 +721,19 @@ const Create = () => {
       >
         Collaboration
       </span>
-      <span
+      <button
         className={cn(
-          "cursor-not-allowed text-gray-400 dark:text-white/28",
-          desktop ? "px-2.5 text-sm" : "px-2 text-[11px]"
+          "rounded-full font-medium transition",
+          activeTab === "community"
+            ? "bg-gray-950 text-white dark:bg-white dark:text-black"
+            : "text-gray-500 hover:text-gray-900 dark:text-white/44 dark:hover:text-white",
+          desktop ? "px-3 py-1.5 text-sm" : "px-2.5 py-1 text-[11px]"
         )}
+        onClick={() => handleSelectTab("community")}
+        type="button"
       >
         Community
-      </span>
+      </button>
     </div>
   );
 
@@ -485,7 +774,7 @@ const Create = () => {
               <div className="flex flex-1 flex-col justify-center pb-14">
                 <div className="text-center">
                   <p className="inline-flex items-center gap-1.5 text-gray-500 text-sm dark:text-white/45">
-                    Launch a creator coin
+                    {topCopy.heroTitle}
                     <InformationCircleIcon className="h-4 w-4" />
                   </p>
                   <p
@@ -496,12 +785,12 @@ const Create = () => {
                         : "text-gray-300 dark:text-white/22"
                     )}
                   >
-                    ₦{previewTicker}
+                    {previewCurrencyTicker}
                   </p>
                   {hasTicker ? (
                     <p className="mt-4 inline-flex items-center gap-1.5 text-green-500 text-lg">
                       <CheckCircleIcon className="h-5 w-5" />
-                      Available
+                      {topCopy.availabilityLabel}
                     </p>
                   ) : null}
                 </div>
@@ -528,7 +817,9 @@ const Create = () => {
                     onClick={handleContinueFromTicker}
                     type="button"
                   >
-                    {hasTicker ? `Launch ₦${ticker.trim()}` : "Proceed"}
+                    {hasTicker
+                      ? `Continue with ${previewCurrencyTicker}`
+                      : "Proceed"}
                   </button>
                 </div>
               </div>
@@ -551,22 +842,21 @@ const Create = () => {
               <div className="flex-1 py-4">
                 <div className="pb-6 text-center">
                   <p className="inline-flex items-center gap-1.5 text-gray-500 text-sm dark:text-white/45">
-                    Launch a creator coin
+                    {topCopy.heroTitle}
                     <InformationCircleIcon className="h-4 w-4" />
                   </p>
                   <p className="mt-5 font-semibold text-5xl text-gray-950 tracking-tight dark:text-white">
-                    ₦{previewTicker}
+                    {previewCurrencyTicker}
                   </p>
                   <p className="mt-3 inline-flex items-center gap-1.5 text-green-500">
                     <CheckCircleIcon className="h-5 w-5" />
-                    Available
+                    {topCopy.availabilityLabel}
                   </p>
                 </div>
 
                 {renderCreateForm({
                   showIntro: false,
-                  showTickerField: false,
-                  submitLabel: "Create coin"
+                  showTickerField: false
                 })}
               </div>
             </div>
@@ -591,31 +881,15 @@ const Create = () => {
             {renderCreateTabs({ desktop: true })}
           </div>
 
-          <div className="grid h-[60vh] max-h-[620px] min-h-[520px] flex-1 grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] gap-5 py-6">
-            <div className="h-full">
-              {renderCreateForm({ desktop: true, submitLabel: "Create coin" })}
-            </div>
+          <div className="grid h-[54vh] max-h-[560px] min-h-[480px] flex-1 grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] gap-4 py-6">
+            <div className="h-full">{renderCreateForm({ desktop: true })}</div>
 
             <aside className="relative h-full overflow-hidden rounded-[32px] border border-gray-200 bg-[#dfe5ef] dark:border-white/8 dark:bg-[#0f1115]">
-              {filePreviewUrl ? (
-                <img
-                  alt={fileName || "Banner preview"}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  src={filePreviewUrl}
-                />
-              ) : (
-                <>
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.95),transparent_38%),linear-gradient(145deg,#edf2f7_0%,#d8e1eb_34%,#b7c3d6_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_34%),linear-gradient(145deg,#161920_0%,#101219_45%,#090b10_100%)]" />
-                  <div className="absolute top-[-48px] right-[-24px] h-52 w-52 rounded-full bg-fuchsia-300/30 blur-3xl dark:bg-fuchsia-500/18" />
-                  <div className="absolute bottom-[-60px] left-[-36px] h-56 w-56 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-500/18" />
-                  <img
-                    alt="Every1 banner"
-                    className="absolute top-1/2 left-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-[2rem] opacity-80 shadow-2xl"
-                    src={evLogo}
-                  />
-                </>
-              )}
-
+              <img
+                alt={fileName || "Banner preview"}
+                className="absolute inset-0 h-full w-full object-cover"
+                src={previewImage}
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/18 to-transparent" />
               <div className="relative flex h-full flex-col justify-between p-6">
                 <div className="inline-flex w-fit items-center gap-2 rounded-full bg-black/30 px-3 py-2 text-white backdrop-blur-md">
@@ -630,18 +904,21 @@ const Create = () => {
                 <div>
                   <div className="mb-4 flex flex-wrap gap-2">
                     <span className="rounded-full bg-white/16 px-3 py-1.5 text-white text-xs backdrop-blur-md">
-                      ₦{previewTicker}
+                      {previewCurrencyTicker}
                     </span>
                     <span className="rounded-full bg-white/16 px-3 py-1.5 text-white text-xs backdrop-blur-md">
-                      {filePreviewUrl ? "Cover ready" : "Add cover image"}
+                      {isCommunity
+                        ? "Community linked on publish"
+                        : "Creator coin"}
                     </span>
                   </div>
                   <p className="max-w-sm font-semibold text-4xl text-white leading-tight">
-                    Shape the story before it hits the feed.
+                    {isCommunity
+                      ? "Launch the community and its coin in one move."
+                      : "Shape the story before it hits the feed."}
                   </p>
                   <p className="mt-3 max-w-sm text-sm text-white/78 leading-6">
-                    A tighter desktop canvas for ticker, cover, caption, and
-                    launch.
+                    {topCopy.previewBody}
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import AccountPreview from "@/components/Shared/Account/AccountPreview";
 import Slug from "@/components/Shared/Slug";
+import { getPublicProfilePathByHandle } from "@/helpers/getAccount";
 import stopEventPropagation from "@/helpers/stopEventPropagation";
 import type { PostMentionFragment } from "@/indexer/generated";
 import type { MarkupLinkProps } from "@/types/misc";
@@ -28,7 +29,7 @@ const Mention = ({ mentions, title }: MarkupLinkProps) => {
       <Link
         className="outline-hidden focus:underline"
         onClick={stopEventPropagation}
-        to={`/u/${name}`}
+        to={getPublicProfilePathByHandle(name)}
       >
         <AccountPreview address={mention.account} username={name}>
           <Slug prefix="@" slug={name} useBrandColor />

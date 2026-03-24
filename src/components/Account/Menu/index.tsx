@@ -2,6 +2,7 @@ import { Menu, MenuButton, MenuItems } from "@headlessui/react";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import { Fragment } from "react";
 import MenuTransition from "@/components/Shared/MenuTransition";
+import { isEvery1OnlyAccount } from "@/helpers/privy";
 import stopEventPropagation from "@/helpers/stopEventPropagation";
 import type { AccountFragment } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
@@ -16,6 +17,7 @@ interface AccountMenuProps {
 
 const AccountMenu = ({ account }: AccountMenuProps) => {
   const { currentAccount } = useAccountStore();
+  const supportsLegacyModeration = !isEvery1OnlyAccount(account);
 
   return (
     <Menu as="div" className="relative">
@@ -39,7 +41,9 @@ const AccountMenu = ({ account }: AccountMenuProps) => {
           static
         >
           <CopyLink account={account} />
-          {currentAccount && currentAccount?.address !== account.address ? (
+          {currentAccount &&
+          currentAccount?.address !== account.address &&
+          supportsLegacyModeration ? (
             <>
               <Block account={account} />
               <Mute account={account} />

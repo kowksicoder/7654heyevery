@@ -9,6 +9,7 @@ interface TabsProps {
   layoutId: string;
   className?: string;
   itemClassName?: string;
+  desktopScrollable?: boolean;
   mobileScrollable?: boolean;
 }
 
@@ -19,6 +20,7 @@ const Tabs = ({
   layoutId,
   className,
   itemClassName,
+  desktopScrollable = false,
   mobileScrollable = false
 }: TabsProps) => {
   return (
@@ -26,8 +28,13 @@ const Tabs = ({
       <motion.ul
         className={cn(
           "mb-0 flex list-none gap-3",
-          mobileScrollable
-            ? "no-scrollbar flex-nowrap overflow-x-auto pb-0.5 md:flex-wrap md:overflow-visible md:pb-0"
+          mobileScrollable || desktopScrollable
+            ? cn(
+                "no-scrollbar flex-nowrap overflow-x-auto pb-0.5",
+                desktopScrollable
+                  ? "md:flex-nowrap md:overflow-x-auto md:pb-0"
+                  : "md:flex-wrap md:overflow-visible md:pb-0"
+              )
             : "flex-wrap",
           className
         )}
@@ -37,7 +44,7 @@ const Tabs = ({
           <motion.li
             className={cn(
               "relative cursor-pointer px-3 py-1.5 text-sm outline-hidden transition-colors",
-              mobileScrollable && "shrink-0",
+              (mobileScrollable || desktopScrollable) && "shrink-0",
               itemClassName
             )}
             key={tab.type}

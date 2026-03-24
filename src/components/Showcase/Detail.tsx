@@ -1,21 +1,39 @@
 import { DocumentTextIcon } from "@heroicons/react/24/outline";
+import dayjs from "dayjs";
 import { memo } from "react";
 import { Navigate, useParams } from "react-router";
 import BackButton from "@/components/Shared/BackButton";
 import PageLayout from "@/components/Shared/PageLayout";
-import { Card, CardHeader } from "@/components/Shared/UI";
+import { Card, CardHeader, Image, Spinner } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
-import { showcasePosts } from "./data";
+import useShowcasePosts from "@/hooks/useShowcasePosts";
+import { getShowcaseIcon } from "./data";
+
+const formatShowcaseDate = (value: string) => dayjs(value).format("D MMM YYYY");
 
 const ShowcaseDetail = () => {
   const { slug } = useParams();
+  const { data: showcasePosts = [], isLoading } = useShowcasePosts();
   const post = showcasePosts.find((entry) => entry.slug === slug);
+
+  if (isLoading) {
+    return (
+      <PageLayout title="Showcase">
+        <Card
+          className="mx-5 flex min-h-64 items-center justify-center md:mx-0"
+          forceRounded
+        >
+          <Spinner />
+        </Card>
+      </PageLayout>
+    );
+  }
 
   if (!post) {
     return <Navigate replace to="/showcase" />;
   }
 
-  const Icon = post.icon;
+  const Icon = getShowcaseIcon(post.iconKey);
 
   return (
     <PageLayout description={post.description} title={post.title}>
@@ -26,9 +44,19 @@ const ShowcaseDetail = () => {
           <div
             className={cn(
               "relative overflow-hidden rounded-[1.7rem] p-5 text-white",
-              post.coverClassName
+              post.coverImageUrl ? "bg-gray-950" : post.coverClassName
             )}
           >
+            {post.coverImageUrl ? (
+              <>
+                <Image
+                  alt={post.title}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  src={post.coverImageUrl}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10" />
+              </>
+            ) : null}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.18),transparent_30%)]" />
             <div className="absolute top-4 right-4 size-20 rounded-full bg-white/10 blur-2xl" />
             <div className="absolute -bottom-6 -left-6 size-24 rounded-full bg-black/20 blur-2xl" />
@@ -53,7 +81,7 @@ const ShowcaseDetail = () => {
                   {post.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/80 uppercase tracking-[0.16em]">
-                  <span>{post.date}</span>
+                  <span>{formatShowcaseDate(post.publishedAt)}</span>
                   <span className="h-1 w-1 rounded-full bg-white/40" />
                   <span>{post.readTime}</span>
                 </div>

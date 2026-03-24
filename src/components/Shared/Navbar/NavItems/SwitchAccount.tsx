@@ -22,7 +22,7 @@ const SwitchAccount = ({ className = "" }: SwitchAccountProps) => {
       type="button"
     >
       <ArrowsRightLeftIcon className="size-4" />
-      <span>Switch account</span>
+      <span>Manage wallets</span>
     </button>
   );
 };

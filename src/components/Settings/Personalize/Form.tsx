@@ -1,5 +1,4 @@
-import { account as accountMetadata } from "@lens-protocol/metadata";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import AvatarUpload from "@/components/Shared/AvatarUpload";
@@ -15,40 +14,22 @@ import {
   useZodForm
 } from "@/components/Shared/UI";
 import { ERRORS } from "@/data/errors";
-import { Regex } from "@/data/regex";
 import errorToast from "@/helpers/errorToast";
-import getAccountAttribute from "@/helpers/getAccountAttribute";
-import prepareAccountMetadata from "@/helpers/prepareAccountMetadata";
-import uploadMetadata from "@/helpers/uploadMetadata";
-import useTransactionLifecycle from "@/hooks/useTransactionLifecycle";
-import useWaitForTransactionToComplete from "@/hooks/useWaitForTransactionToComplete";
-import {
-  useMeLazyQuery,
-  useSetAccountMetadataMutation
-} from "@/indexer/generated";
+import { upsertEvery1Profile } from "@/helpers/every1";
+import { mergeEvery1ProfileIntoAccount } from "@/helpers/privy";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import type { ApolloClientError } from "@/types/errors";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 
 const ValidationSchema = z.object({
   bio: z.string().max(260, { message: "Bio should not exceed 260 characters" }),
-  location: z.string().max(100, {
-    message: "Location should not exceed 100 characters"
-  }),
   name: z
     .string()
     .max(100, { message: "Name should not exceed 100 characters" })
-    .regex(Regex.accountNameValidator, {
-      message: "Account name must not contain restricted symbols"
-    }),
-  website: z.union([
-    z.string().regex(Regex.url, { message: "Invalid website" }),
-    z.string().max(0)
-  ]),
-  x: z.string().max(100, { message: "X handle must not exceed 100 characters" })
 });
 
 const PersonalizeSettingsForm = () => {
   const { currentAccount, setCurrentAccount } = useAccountStore();
+  const { setProfile } = useEvery1Store();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(
     currentAccount?.metadata?.picture
@@ -56,56 +37,11 @@ const PersonalizeSettingsForm = () => {
   const [coverUrl, setCoverUrl] = useState<string | undefined>(
     currentAccount?.metadata?.coverPicture
   );
-  const handleTransactionLifecycle = useTransactionLifecycle();
-  const waitForTransactionToComplete = useWaitForTransactionToComplete();
-  const [getCurrentAccountDetails] = useMeLazyQuery({
-    fetchPolicy: "no-cache"
-  });
-
-  const onCompleted = async (hash: string) => {
-    await waitForTransactionToComplete(hash);
-    const accountData = await getCurrentAccountDetails();
-    setCurrentAccount(accountData?.data?.me.loggedInAs.account);
-    setIsSubmitting(false);
-    toast.success("Account updated");
-  };
-
-  const onError = useCallback((error: ApolloClientError) => {
-    setIsSubmitting(false);
-    errorToast(error);
-  }, []);
-
-  const [setAccountMetadata] = useSetAccountMetadataMutation({
-    onCompleted: async ({ setAccountMetadata }) => {
-      if (setAccountMetadata.__typename === "SetAccountMetadataResponse") {
-        return onCompleted(setAccountMetadata.hash);
-      }
-
-      return await handleTransactionLifecycle({
-        onCompleted,
-        onError,
-        transactionData: setAccountMetadata
-      });
-    },
-    onError
-  });
 
   const form = useZodForm({
     defaultValues: {
       bio: currentAccount?.metadata?.bio || "",
-      location: getAccountAttribute(
-        "location",
-        currentAccount?.metadata?.attributes
-      ),
-      name: currentAccount?.metadata?.name || "",
-      website: getAccountAttribute(
-        "website",
-        currentAccount?.metadata?.attributes
-      ),
-      x: getAccountAttribute(
-        "x",
-        currentAccount?.metadata?.attributes
-      )?.replace(/(https:\/\/)?x\.com\//, "")
+      name: currentAccount?.metadata?.name || ""
     },
     schema: ValidationSchema
   });
@@ -119,26 +55,38 @@ const PersonalizeSettingsForm = () => {
       return toast.error(ERRORS.SignWallet);
     }
 
-    setIsSubmitting(true);
-    umami.track("update_profile");
-    const preparedAccountMetadata = prepareAccountMetadata(currentAccount, {
-      attributes: {
-        location: data.location,
-        website: data.website,
-        x: data.x
-      },
-      bio: data.bio,
-      coverPicture: coverUrl,
-      name: data.name,
-      picture: avatarUrl
-    });
-    const metadataUri = await uploadMetadata(
-      accountMetadata(preparedAccountMetadata)
-    );
+    try {
+      setIsSubmitting(true);
+      umami.track("update_profile");
 
-    return await setAccountMetadata({
-      variables: { request: { metadataUri } }
-    });
+      const updatedProfile = await upsertEvery1Profile({
+        avatarUrl,
+        bannerUrl: coverUrl,
+        bio: data.bio,
+        displayName: data.name,
+        lensAccountAddress: currentAccount.address,
+        username: currentAccount.username?.localName || null,
+        walletAddress: currentAccount.owner || currentAccount.address,
+        zoraHandle: currentAccount.username?.localName || null
+      });
+
+      setProfile(updatedProfile);
+      setCurrentAccount(
+        mergeEvery1ProfileIntoAccount(currentAccount, updatedProfile)
+      );
+      form.reset(
+        {
+          bio: updatedProfile.bio || "",
+          name: updatedProfile.displayName || ""
+        },
+        { keepValues: false }
+      );
+      toast.success("Profile updated");
+    } catch (error) {
+      errorToast(error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const onSetAvatar = async (src: string | undefined) => {
@@ -171,25 +119,6 @@ const PersonalizeSettingsForm = () => {
           type="text"
           {...form.register("name")}
         />
-        <Input
-          label="Location"
-          placeholder="Miami"
-          type="text"
-          {...form.register("location")}
-        />
-        <Input
-          label="Website"
-          placeholder="https://hooli.com"
-          type="text"
-          {...form.register("website")}
-        />
-        <Input
-          label="X"
-          placeholder="gavin"
-          prefix="https://x.com"
-          type="text"
-          {...form.register("x")}
-        />
         <TextArea
           label="Bio"
           placeholder="Tell us something about you!"
@@ -199,9 +128,7 @@ const PersonalizeSettingsForm = () => {
         <CoverUpload setSrc={onSetCover} src={coverUrl || ""} />
         <Button
           className="ml-auto"
-          disabled={
-            isSubmitting || (!form.formState.isDirty && !coverUrl && !avatarUrl)
-          }
+          disabled={isSubmitting || !form.formState.isDirty}
           loading={isSubmitting}
           type="submit"
         >

@@ -12,7 +12,10 @@ import Footer from "@/components/Shared/Footer";
 import PageLayout from "@/components/Shared/PageLayout";
 import { Card, CardHeader, WarningMessage } from "@/components/Shared/UI";
 import getAccount from "@/helpers//getAccount";
+import getAvatar from "@/helpers//getAvatar";
 import { isRepost } from "@/helpers//postHelpers";
+import getPostData from "@/helpers/getPostData";
+import truncateByWords from "@/helpers/truncateByWords";
 import {
   PageSize,
   PostReferenceType,
@@ -88,9 +91,35 @@ const ViewPost = () => {
   const canComment =
     targetPost.operations?.canComment.__typename ===
     "PostOperationValidationPassed";
+  const authorHandle = getAccount(targetPost.author).username;
+  const shareHandle = authorHandle.startsWith("#")
+    ? authorHandle
+    : `@${authorHandle}`;
+  const postData = getPostData(targetPost.metadata);
+  const cleanedContent =
+    postData?.content?.replace(/\s+/g, " ").trim() || undefined;
+  const attachmentImage =
+    postData?.attachments?.find((attachment) => attachment.type === "Image")
+      ?.uri ||
+    postData?.attachments?.find((attachment) => attachment.coverUri)?.coverUri;
+  const shareImage =
+    (postData?.asset?.type === "Image"
+      ? postData.asset.uri
+      : postData?.asset?.cover || null) ||
+    attachmentImage ||
+    getAvatar(targetPost.author);
+  const shareDescription =
+    cleanedContent || `View this post from ${shareHandle} on Every1.`;
+  const shareTitle = showQuotes
+    ? `Quotes for ${shareHandle} - Every1`
+    : cleanedContent
+      ? `${truncateByWords(cleanedContent, 14)} - Every1`
+      : `Post by ${shareHandle} - Every1`;
 
   return (
     <PageLayout
+      description={shareDescription}
+      image={shareImage}
       sidebar={
         <div className="space-y-5">
           <Card as="aside" className="p-5">
@@ -109,9 +138,8 @@ const ViewPost = () => {
           <Footer />
         </div>
       }
-      title={`${targetPost.__typename} by ${
-        getAccount(targetPost.author).username
-      } - Every1`}
+      title={shareTitle}
+      type={showQuotes ? "website" : "article"}
       zeroTopMargin
     >
       <div className="space-y-5">

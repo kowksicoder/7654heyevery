@@ -1,23 +1,17 @@
-import { useSignupStore } from "@/components/Shared/Auth/Signup";
 import { Button } from "@/components/Shared/UI";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import useOpenAuth from "@/hooks/useOpenAuth";
 
 interface SignupButtonProps {
   className?: string;
 }
 
 const SignupButton = ({ className }: SignupButtonProps) => {
-  const { setShowAuthModal } = useAuthModalStore();
-  const { setScreen } = useSignupStore();
+  const openAuth = useOpenAuth();
 
   return (
     <Button
       className={className}
-      onClick={() => {
-        umami.track("open_signup");
-        setScreen("choose");
-        setShowAuthModal(true, "signup");
-      }}
+      onClick={() => void openAuth("open_signup")}
       outline
       size="md"
     >

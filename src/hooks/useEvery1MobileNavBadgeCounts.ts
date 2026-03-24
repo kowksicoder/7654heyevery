@@ -19,7 +19,10 @@ const useEvery1MobileNavBadgeCounts = () => {
     enabled: Boolean(profile?.id) && hasSupabaseConfig(),
     queryFn: () => getMobileNavBadgeCounts(profile?.id as string),
     queryKey: [EVERY1_MOBILE_NAV_BADGE_COUNTS_QUERY_KEY, profile?.id],
-    refetchInterval: 15000
+    refetchInterval: 10000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0
   });
 
   return query.data ?? EMPTY_COUNTS;

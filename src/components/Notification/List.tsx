@@ -1,9 +1,12 @@
 import {
   BellIcon,
   ChatBubbleOvalLeftEllipsisIcon,
+  CheckCircleIcon,
+  FireIcon,
   GiftIcon,
   HeartIcon,
   SparklesIcon,
+  UserGroupIcon,
   UserPlusIcon
 } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,40 +35,59 @@ const FEED_KIND_MAP: Record<
 > = {
   [NotificationFeedType.Activity]: [
     "comment",
+    "community",
+    "follow",
     "like",
     "mission",
     "payment",
     "share",
-    "streak"
+    "streak",
+    "verification"
   ],
   [NotificationFeedType.All]: [
     "comment",
+    "community",
+    "follow",
     "like",
     "mission",
+    "nudge",
     "payment",
     "referral",
     "reward",
     "share",
     "streak",
     "system",
-    "toast"
+    "toast",
+    "verification",
+    "welcome"
   ],
   [NotificationFeedType.Referrals]: ["referral"],
   [NotificationFeedType.Rewards]: ["reward"],
-  [NotificationFeedType.System]: ["system", "toast"]
+  [NotificationFeedType.System]: [
+    "nudge",
+    "system",
+    "toast",
+    "verification",
+    "welcome"
+  ]
 };
 
 const kindIconMap: Record<Every1Notification["kind"], ReactNode> = {
   comment: <ChatBubbleOvalLeftEllipsisIcon className="size-5" />,
+  community: <UserGroupIcon className="size-5" />,
+  follow: <UserPlusIcon className="size-5" />,
   like: <HeartIcon className="size-5" />,
   mission: <SparklesIcon className="size-5" />,
+  nudge: <FireIcon className="size-5" />,
   payment: <GiftIcon className="size-5" />,
   referral: <UserPlusIcon className="size-5" />,
   reward: <GiftIcon className="size-5" />,
   share: <SparklesIcon className="size-5" />,
   streak: <SparklesIcon className="size-5" />,
   system: <BellIcon className="size-5" />,
-  toast: <BellIcon className="size-5" />
+  toast: <BellIcon className="size-5" />,
+  verification: <CheckCircleIcon className="size-5" />,
+  welcome: <SparklesIcon className="size-5" />
 };
 
 const List = ({ feedType }: ListProps) => {
@@ -150,7 +172,10 @@ const List = ({ feedType }: ListProps) => {
   return (
     <Card className="divide-y divide-gray-200 dark:divide-gray-800">
       {notifications.map((notification) => (
-        <div className="flex items-start gap-3 p-5" key={notification.id}>
+        <div
+          className="flex items-start gap-2.5 p-3 md:gap-3 md:p-4"
+          key={notification.id}
+        >
           <div className="relative mt-0.5 shrink-0">
             {notification.actorAvatarUrl ? (
               <Image
@@ -159,15 +184,15 @@ const List = ({ feedType }: ListProps) => {
                   notification.actorUsername ||
                   notification.title
                 }
-                className="size-11 rounded-full object-cover"
+                className="size-9 rounded-full object-cover md:size-10"
                 src={notification.actorAvatarUrl}
               />
             ) : (
-              <div className="flex size-11 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+              <div className="flex size-9 items-center justify-center rounded-full bg-gray-100 text-gray-600 md:size-10 dark:bg-gray-900 dark:text-gray-300">
                 {kindIconMap[notification.kind]}
               </div>
             )}
-            <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm ring-1 ring-gray-200 dark:bg-black dark:text-gray-300 dark:ring-gray-800">
+            <span className="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm ring-1 ring-gray-200 md:-right-1 md:-bottom-1 md:size-5 dark:bg-black dark:text-gray-300 dark:ring-gray-800">
               {kindIconMap[notification.kind]}
             </span>
           </div>
@@ -175,27 +200,27 @@ const List = ({ feedType }: ListProps) => {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-semibold text-gray-950 text-sm dark:text-gray-50">
+                <p className="truncate font-semibold text-[13px] text-gray-950 leading-5 md:text-sm dark:text-gray-50">
                   {notification.title}
                 </p>
                 {notification.body ? (
-                  <p className="mt-1 text-gray-600 text-sm dark:text-gray-400">
+                  <p className="mt-0.5 text-[12px] text-gray-600 leading-4.5 md:mt-1 md:text-sm dark:text-gray-400">
                     {notification.body}
                   </p>
                 ) : null}
                 {notification.actorDisplayName || notification.actorUsername ? (
-                  <p className="mt-1 text-gray-500 text-xs dark:text-gray-400">
+                  <p className="mt-0.5 text-[11px] text-gray-500 md:mt-1 md:text-xs dark:text-gray-400">
                     {notification.actorDisplayName ||
                       notification.actorUsername}
                   </p>
                 ) : null}
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
                 {notification.isRead ? null : (
-                  <span className="size-2 rounded-full bg-pink-500" />
+                  <span className="size-1.5 rounded-full bg-pink-500 md:size-2" />
                 )}
-                <span className="text-gray-500 text-xs dark:text-gray-400">
+                <span className="text-[11px] text-gray-500 md:text-xs dark:text-gray-400">
                   {formatRelativeOrAbsolute(notification.createdAt)}
                 </span>
               </div>

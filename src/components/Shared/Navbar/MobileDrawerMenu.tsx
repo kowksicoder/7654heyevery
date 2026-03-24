@@ -6,20 +6,22 @@ import {
   GiftIcon,
   InformationCircleIcon,
   PlusCircleIcon,
+  ShieldCheckIcon,
   UserCircleIcon,
   UserGroupIcon
 } from "@heroicons/react/24/outline";
+import { usePrivy } from "@privy-io/react-auth";
 import { Link, useLocation } from "react-router";
 import evLogo from "@/assets/fonts/evlogo.jpg";
-import { useSignupStore } from "@/components/Shared/Auth/Signup";
 import { Button, Image } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
 import getAccount from "@/helpers/getAccount";
 import reloadAllTabs from "@/helpers/reloadAllTabs";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import useOpenAuth from "@/hooks/useOpenAuth";
 import { useMobileDrawerModalStore } from "@/store/non-persisted/modal/useMobileDrawerModalStore";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { signOut } from "@/store/persisted/useAuthStore";
+import useStaffAdminStore from "@/store/persisted/useStaffAdminStore";
 
 const isActivePath = (pathname: string, path: string) => {
   if (path === "/") {
@@ -41,8 +43,9 @@ const isActivePath = (pathname: string, path: string) => {
 const MobileDrawerMenu = () => {
   const { pathname } = useLocation();
   const { currentAccount } = useAccountStore();
-  const { setShowAuthModal } = useAuthModalStore();
-  const { setScreen } = useSignupStore();
+  const { sessionToken } = useStaffAdminStore();
+  const { logout } = usePrivy();
+  const openAuth = useOpenAuth();
   const { setShow: setShowMobileDrawer } = useMobileDrawerModalStore();
 
   const handleCloseDrawer = () => {
@@ -78,6 +81,15 @@ const MobileDrawerMenu = () => {
       label: "Referrals",
       path: "/referrals"
     },
+    ...(sessionToken
+      ? [
+          {
+            icon: <ShieldCheckIcon className="size-4.5" />,
+            label: "Admin",
+            path: "/staff"
+          }
+        ]
+      : []),
     {
       icon: <FlagIcon className="size-4.5" />,
       label: "Missions",
@@ -156,7 +168,7 @@ const MobileDrawerMenu = () => {
                 className="w-full"
                 onClick={() => {
                   handleCloseDrawer();
-                  setShowAuthModal(true);
+                  void openAuth("open_login");
                 }}
                 size="sm"
               >
@@ -166,8 +178,7 @@ const MobileDrawerMenu = () => {
                 className="w-full"
                 onClick={() => {
                   handleCloseDrawer();
-                  setScreen("choose");
-                  setShowAuthModal(true, "signup");
+                  void openAuth("open_signup");
                 }}
                 outline
                 size="sm"
@@ -231,6 +242,7 @@ const MobileDrawerMenu = () => {
                 "text-gray-900 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-900"
               )}
               onClick={async () => {
+                await logout();
                 await signOut();
                 reloadAllTabs();
                 handleCloseDrawer();
@@ -266,7 +278,7 @@ const MobileDrawerMenu = () => {
                 )}
                 onClick={() => {
                   handleCloseDrawer();
-                  setShowAuthModal(true);
+                  void openAuth("open_login");
                 }}
                 type="button"
               >

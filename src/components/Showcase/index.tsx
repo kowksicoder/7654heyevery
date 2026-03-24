@@ -1,12 +1,18 @@
 import { DocumentTextIcon } from "@heroicons/react/24/outline";
+import dayjs from "dayjs";
 import { memo } from "react";
 import { Link } from "react-router";
 import PageLayout from "@/components/Shared/PageLayout";
-import { Card } from "@/components/Shared/UI";
+import { Card, ErrorMessage, Image } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
-import { showcasePosts } from "./data";
+import useShowcasePosts from "@/hooks/useShowcasePosts";
+import { getShowcaseIcon } from "./data";
+
+const formatShowcaseDate = (value: string) => dayjs(value).format("D MMM YYYY");
 
 const Showcase = () => {
+  const { data: showcasePosts = [], error } = useShowcasePosts();
+
   return (
     <PageLayout
       description="Every1 product notes, feature drops, design updates, and community stories."
@@ -39,25 +45,39 @@ const Showcase = () => {
         </div>
       </Card>
 
+      {error ? (
+        <ErrorMessage error={error} title="Failed to load showcase" />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {showcasePosts.map((post) => {
-          const Icon = post.icon;
+          const Icon = getShowcaseIcon(post.iconKey);
 
           return (
             <Card
               className="mx-5 overflow-hidden p-3 md:mx-0"
               forceRounded
-              key={post.title}
+              key={post.id}
             >
               <div className="space-y-3">
                 <Link
                   aria-label={`Open ${post.title}`}
                   className={cn(
                     "relative block h-40 overflow-hidden rounded-[1.4rem] p-3 text-white transition-transform hover:scale-[1.01]",
-                    post.coverClassName
+                    post.coverImageUrl ? "bg-gray-950" : post.coverClassName
                   )}
                   to={`/showcase/${post.slug}`}
                 >
+                  {post.coverImageUrl ? (
+                    <>
+                      <Image
+                        alt={post.title}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        src={post.coverImageUrl}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/10" />
+                    </>
+                  ) : null}
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.18),transparent_30%)]" />
                   <div className="absolute top-3 right-3 size-16 rounded-full bg-white/10 blur-2xl" />
                   <div className="absolute -bottom-5 -left-3 size-20 rounded-full bg-black/20 blur-2xl" />
@@ -81,7 +101,7 @@ const Showcase = () => {
                         {post.title}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 text-[10px] text-white/80 uppercase tracking-[0.16em]">
-                        <span>{post.date}</span>
+                        <span>{formatShowcaseDate(post.publishedAt)}</span>
                         <span className="h-1 w-1 rounded-full bg-white/40" />
                         <span>{post.readTime}</span>
                       </div>

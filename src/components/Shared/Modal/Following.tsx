@@ -6,33 +6,58 @@ import SingleAccount from "@/components/Shared/Account/SingleAccount";
 import AccountListShimmer from "@/components/Shared/Shimmer/AccountListShimmer";
 import { EmptyState, ErrorMessage } from "@/components/Shared/UI";
 import cn from "@/helpers/cn";
+import { buildAccountFromEvery1Profile } from "@/helpers/privy";
+import useEvery1FollowList from "@/hooks/useEvery1FollowList";
 import useLoadMoreOnIntersect from "@/hooks/useLoadMoreOnIntersect";
 import type { FollowingRequest } from "@/indexer/generated";
 import { PageSize, useFollowingQuery } from "@/indexer/generated";
-import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { accountsList } from "@/variants";
 
 interface FollowingProps {
+  profileId?: null | string;
   username: string;
   address: string;
 }
 
-const Following = ({ username, address }: FollowingProps) => {
-  const { currentAccount } = useAccountStore();
-
+const Following = ({ username, address, profileId }: FollowingProps) => {
   const request: FollowingRequest = {
     account: address,
     pageSize: PageSize.Fifty
   };
+  const {
+    data: every1Following,
+    error: every1Error,
+    isLoading: loadingEvery1Following
+  } = useEvery1FollowList({
+    limit: 100,
+    mode: "following",
+    profileId
+  });
 
   const { data, error, fetchMore, loading } = useFollowingQuery({
-    skip: !address,
+    skip: Boolean(profileId) || !address,
     variables: { request }
   });
 
-  const followings = data?.following?.items;
+  const followings = profileId
+    ? every1Following?.map((following) =>
+        buildAccountFromEvery1Profile({
+          avatarUrl: following.avatarUrl,
+          bannerUrl: following.bannerUrl,
+          bio: following.bio,
+          displayName: following.displayName,
+          e1xpTotal: 0,
+          id: following.id,
+          lensAccountAddress: following.lensAccountAddress,
+          referralCode: null,
+          username: following.username,
+          walletAddress: following.walletAddress,
+          zoraHandle: following.zoraHandle
+        })
+      )
+    : data?.following?.items.map((following) => following.following);
   const pageInfo = data?.following?.pageInfo;
-  const hasMore = pageInfo?.next;
+  const hasMore = !profileId && pageInfo?.next;
 
   const handleEndReached = useCallback(async () => {
     if (hasMore) {
@@ -44,7 +69,7 @@ const Following = ({ username, address }: FollowingProps) => {
 
   const loadMoreRef = useLoadMoreOnIntersect(handleEndReached);
 
-  if (loading) {
+  if ((profileId && loadingEvery1Following) || (!profileId && loading)) {
     return <AccountListShimmer />;
   }
 
@@ -63,11 +88,11 @@ const Following = ({ username, address }: FollowingProps) => {
     );
   }
 
-  if (error) {
+  if (profileId ? every1Error : error) {
     return (
       <ErrorMessage
         className="m-5"
-        error={error}
+        error={(profileId ? every1Error : error) as Error}
         title="Failed to load following"
       />
     );
@@ -84,17 +109,11 @@ const Following = ({ username, address }: FollowingProps) => {
               index === followings.length - 1 && "border-b-0"
             )}
             initial="hidden"
-            key={following.following.address}
+            key={following.address}
             variants={accountsList}
           >
             <SingleAccount
-              account={following.following}
-              hideFollowButton={
-                currentAccount?.address === following.following.address
-              }
-              hideUnfollowButton={
-                currentAccount?.address === following.following.address
-              }
+              account={following}
               showBio
               showUserPreview={false}
             />

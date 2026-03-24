@@ -1,6 +1,9 @@
 import stopEventPropagation from "@/helpers/stopEventPropagation";
+import useEvery1AccountProfile from "@/hooks/useEvery1AccountProfile";
+import useEvery1FollowRelationship from "@/hooks/useEvery1FollowRelationship";
 import type { AccountFragment } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 import FollowWithRulesCheck from "./FollowWithRulesCheck";
 import Unfollow from "./Unfollow";
 
@@ -22,15 +25,26 @@ const FollowUnfollowButton = ({
   unfollowTitle = "Following"
 }: FollowUnfollowButtonProps) => {
   const { currentAccount } = useAccountStore();
+  const { profile } = useEvery1Store();
+  const { profileId: targetProfileId } = useEvery1AccountProfile(account);
+  const { relationship } = useEvery1FollowRelationship(targetProfileId);
 
-  if (currentAccount?.address === account.address) {
+  const isSelf =
+    Boolean(profile?.id && targetProfileId && profile.id === targetProfileId) ||
+    currentAccount?.address === account.address ||
+    currentAccount?.owner === account.owner;
+
+  if (isSelf) {
     return null;
   }
+
+  const isFollowedByMe =
+    relationship.isFollowedByMe || account.operations?.isFollowedByMe || false;
 
   return (
     <div className="contents" onClick={stopEventPropagation}>
       {!hideFollowButton &&
-        (account.operations?.isFollowedByMe ? null : (
+        (isFollowedByMe ? null : (
           <FollowWithRulesCheck
             account={account}
             buttonClassName={buttonClassName}
@@ -38,7 +52,7 @@ const FollowUnfollowButton = ({
           />
         ))}
       {!hideUnfollowButton &&
-        (account.operations?.isFollowedByMe ? (
+        (isFollowedByMe ? (
           <Unfollow
             account={account}
             buttonClassName={buttonClassName}

@@ -1,10 +1,25 @@
 import {
   DevicePhoneMobileIcon,
+  DocumentTextIcon,
   SparklesIcon,
   UserGroupIcon
 } from "@heroicons/react/24/outline";
+import type { ComponentType, SVGProps } from "react";
+import type { ShowcasePostRecord } from "@/types/staff";
 
-export const showcasePosts = [
+export type ShowcaseIconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+export const showcaseIconMap: Record<string, ShowcaseIconComponent> = {
+  "device-phone-mobile": DevicePhoneMobileIcon,
+  document: DocumentTextIcon,
+  sparkles: SparklesIcon,
+  "user-group": UserGroupIcon
+};
+
+export const getShowcaseIcon = (iconKey?: null | string) =>
+  showcaseIconMap[iconKey || ""] || DocumentTextIcon;
+
+export const showcaseFallbackPosts: ShowcasePostRecord[] = [
   {
     category: "Product",
     content: [
@@ -14,14 +29,17 @@ export const showcasePosts = [
     ],
     coverClassName:
       "bg-[radial-gradient(circle_at_18%_24%,rgba(255,255,255,0.28),transparent_28%),linear-gradient(135deg,#0f172a_0%,#111827_36%,#059669_100%)]",
-    date: "20 Mar 2026",
+    coverImageUrl: null,
     description:
       "A quick look at the latest feed, mobile create flow, and creator-first UI updates shipping across Every1.",
-    icon: DevicePhoneMobileIcon,
+    iconKey: "device-phone-mobile",
+    id: "fallback-mobile-experience",
     pillClassName:
       "bg-white/12 text-white ring-1 ring-white/20 backdrop-blur dark:bg-white/12",
+    publishedAt: "2026-03-20",
     readTime: "4 min read",
     slug: "inside-the-new-every1-mobile-experience",
+    sortOrder: 10,
     title: "Inside the new Every1 mobile experience"
   },
   {
@@ -33,14 +51,17 @@ export const showcasePosts = [
     ],
     coverClassName:
       "bg-[radial-gradient(circle_at_82%_18%,rgba(255,255,255,0.26),transparent_24%),linear-gradient(140deg,#172554_0%,#1d4ed8_48%,#60a5fa_100%)]",
-    date: "14 Mar 2026",
+    coverImageUrl: null,
     description:
       "How creator coins, discovery rails, and showcase storytelling can work together across the platform.",
-    icon: SparklesIcon,
+    iconKey: "sparkles",
+    id: "fallback-creators",
     pillClassName:
       "bg-white/14 text-white ring-1 ring-white/20 backdrop-blur dark:bg-white/14",
+    publishedAt: "2026-03-14",
     readTime: "3 min read",
     slug: "designing-a-better-home-for-creators",
+    sortOrder: 20,
     title: "Designing a better home for creators"
   },
   {
@@ -52,16 +73,17 @@ export const showcasePosts = [
     ],
     coverClassName:
       "bg-[radial-gradient(circle_at_16%_76%,rgba(255,255,255,0.22),transparent_26%),linear-gradient(135deg,#3f2d20_0%,#a16207_42%,#f59e0b_100%)]",
-    date: "7 Mar 2026",
+    coverImageUrl: null,
     description:
       "A preview of the community loops we want to bring in next, from missions to streaks to better onboarding.",
-    icon: UserGroupIcon,
+    iconKey: "user-group",
+    id: "fallback-community",
     pillClassName:
       "bg-white/16 text-white ring-1 ring-white/25 backdrop-blur dark:bg-white/16",
+    publishedAt: "2026-03-07",
     readTime: "5 min read",
     slug: "whats-next-for-the-every1-community-layer",
+    sortOrder: 30,
     title: "What's next for the Every1 community layer"
   }
-] as const;
-
-export type ShowcasePost = (typeof showcasePosts)[number];
+];

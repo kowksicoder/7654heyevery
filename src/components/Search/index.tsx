@@ -1,55 +1,62 @@
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router";
 import PageLayout from "@/components/Shared/PageLayout";
 import { default as SearchInput } from "@/components/Shared/Search";
-import Sidebar from "@/components/Shared/Sidebar";
-import { EmptyState } from "@/components/Shared/UI";
 import Accounts from "./Accounts";
+import Coins from "./Coins";
 import FeedType, { SearchTabFocus } from "./FeedType";
 import Groups from "./Groups";
-import Posts from "./Posts";
+import SearchLanding from "./SearchLanding";
+
+const normalizeSearchFeedType = (value?: null | string) => {
+  const normalized = value?.trim().toLowerCase();
+
+  switch (normalized) {
+    case "accounts":
+    case "creators":
+      return SearchTabFocus.Creators;
+    case "groups":
+    case "communities":
+      return SearchTabFocus.Communities;
+    default:
+      return SearchTabFocus.Coins;
+  }
+};
 
 const Search = () => {
   const [searchParams] = useSearchParams();
-  const q = searchParams.get("q");
-  const type =
-    searchParams.get("type") || SearchTabFocus.Accounts.toLowerCase();
-
-  const lowerCaseFeedType = [
-    SearchTabFocus.Accounts.toLowerCase(),
-    SearchTabFocus.Posts.toLowerCase(),
-    SearchTabFocus.Groups.toLowerCase()
-  ];
-
-  const getFeedType = (type: string | undefined) => {
-    return type && lowerCaseFeedType.includes(type.toLowerCase())
-      ? type.toUpperCase()
-      : SearchTabFocus.Accounts;
-  };
-
-  const feedType = getFeedType(Array.isArray(type) ? type[0] : type);
+  const q = searchParams.get("q")?.trim() || "";
+  const type = searchParams.get("type");
+  const feedType = useMemo(() => normalizeSearchFeedType(type), [type]);
 
   return (
-    <PageLayout hideSearch sidebar={<Sidebar />} title="Search">
-      <div className="px-5 md:px-0">
-        <SearchInput />
+    <PageLayout hideSearch title="Search" zeroTopMargin>
+      <div className="space-y-4 px-3 pt-2.5 md:space-y-5 md:px-0 md:pt-0">
+        <section className="rounded-[24px] bg-white/95 p-2.5 shadow-xs backdrop-blur md:rounded-[28px] md:p-3.5 dark:bg-[#060606]/95">
+          <SearchInput
+            inputClassName="px-3 py-2.5 text-[13px] md:px-4 md:py-3 md:text-[15px]"
+            placeholder="Search creators, coins, communities..."
+          />
+        </section>
+
+        {q ? (
+          <section className="space-y-3 md:space-y-4">
+            <div className="rounded-[20px] bg-gray-50/75 p-1.5 md:rounded-[24px] md:p-2.5 dark:bg-[#050505]">
+              <FeedType feedType={feedType} />
+            </div>
+
+            {feedType === SearchTabFocus.Coins ? <Coins query={q} /> : null}
+            {feedType === SearchTabFocus.Creators ? (
+              <Accounts query={q} />
+            ) : null}
+            {feedType === SearchTabFocus.Communities ? (
+              <Groups query={q} />
+            ) : null}
+          </section>
+        ) : (
+          <SearchLanding />
+        )}
       </div>
-      <FeedType feedType={feedType as SearchTabFocus} />
-      {!q && (
-        <EmptyState
-          icon={<MagnifyingGlassIcon className="size-8" />}
-          message="Search for accounts, posts, or groups"
-        />
-      )}
-      {q && feedType === SearchTabFocus.Accounts ? (
-        <Accounts query={q as string} />
-      ) : null}
-      {q && feedType === SearchTabFocus.Posts ? (
-        <Posts query={q as string} />
-      ) : null}
-      {q && feedType === SearchTabFocus.Groups ? (
-        <Groups query={q as string} />
-      ) : null}
     </PageLayout>
   );
 };

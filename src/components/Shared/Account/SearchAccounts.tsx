@@ -1,6 +1,9 @@
-import type { ChangeEvent } from "react";
+import { type ChangeEvent, useState } from "react";
 import Loader from "@/components/Shared/Loader";
 import { Card, Input } from "@/components/Shared/UI";
+import { searchPublicEvery1Profiles } from "@/helpers/every1";
+import { buildAccountFromEvery1Profile } from "@/helpers/privy";
+import { hasSupabaseConfig } from "@/helpers/supabase";
 import {
   type AccountFragment,
   AccountsOrderBy,
@@ -27,12 +30,45 @@ const SearchAccounts = ({
   placeholder = "Search…",
   value
 }: SearchAccountsProps) => {
-  const [searchAccounts, { data, loading }] = useAccountsLazyQuery();
+  const hasConfiguredSupabase = hasSupabaseConfig();
+  const [accounts, setAccounts] = useState<AccountFragment[]>([]);
+  const [isSearchingProfiles, setIsSearchingProfiles] = useState(false);
+  const [searchAccounts, { data, loading: loadingLensAccounts }] =
+    useAccountsLazyQuery();
+  const loading = hasConfiguredSupabase
+    ? isSearchingProfiles
+    : loadingLensAccounts;
 
   const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
     onChange(event);
 
     const keyword = event.target.value;
+
+    if (!keyword.trim()) {
+      setAccounts([]);
+      setIsSearchingProfiles(false);
+      return;
+    }
+
+    if (hasConfiguredSupabase) {
+      setIsSearchingProfiles(true);
+
+      void searchPublicEvery1Profiles(keyword, 7)
+        .then((profiles) => {
+          setAccounts(
+            profiles.map((profile) => buildAccountFromEvery1Profile(profile))
+          );
+        })
+        .catch(() => {
+          setAccounts([]);
+        })
+        .finally(() => {
+          setIsSearchingProfiles(false);
+        });
+
+      return;
+    }
+
     const request: AccountsRequest = {
       filter: { searchBy: { localNameQuery: keyword } },
       orderBy: AccountsOrderBy.BestMatch,
@@ -42,7 +78,8 @@ const SearchAccounts = ({
     searchAccounts({ variables: { request } });
   };
 
-  const accounts = data?.accounts?.items;
+  const fallbackAccounts = data?.accounts?.items;
+  const safeAccounts = hasConfiguredSupabase ? accounts : fallbackAccounts;
 
   return (
     <div className="relative w-full">
@@ -58,8 +95,8 @@ const SearchAccounts = ({
           <Card className="z-[2] max-h-[80vh] overflow-y-auto py-2">
             {loading ? (
               <Loader className="my-3" message="Searching users" small />
-            ) : accounts && accounts.length > 0 ? (
-              accounts.slice(0, 7).map((account) => (
+            ) : safeAccounts && safeAccounts.length > 0 ? (
+              safeAccounts.slice(0, 7).map((account) => (
                 <div
                   className="cursor-pointer px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-800"
                   key={account.address}

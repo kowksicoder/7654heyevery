@@ -1,19 +1,15 @@
 import { memo } from "react";
-import { useSignupStore } from "@/components/Shared/Auth/Signup";
-import Footer from "@/components/Shared/Footer";
 import { Button, Card, Image } from "@/components/Shared/UI";
 import { STATIC_IMAGES_URL } from "@/data/constants";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import useOpenAuth from "@/hooks/useOpenAuth";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import WhoToFollow from "./WhoToFollow";
 
 const SignupBanner = () => {
-  const { setShowAuthModal } = useAuthModalStore();
-  const { setScreen } = useSignupStore();
+  const openAuth = useOpenAuth();
 
   const handleSignupClick = () => {
-    setScreen("choose");
-    setShowAuthModal(true, "signup");
+    void openAuth("open_signup");
   };
 
   return (
@@ -58,7 +54,6 @@ const Sidebar = () => {
     <>
       {loggedOut && <SignupBanner />}
       {loggedInWithAccount && <WhoToFollow />}
-      <Footer />
     </>
   );
 };

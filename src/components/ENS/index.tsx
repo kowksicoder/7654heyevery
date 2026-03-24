@@ -1,45 +1,30 @@
-import { createTrackedSelector } from "react-tracked";
-import { create } from "zustand";
+import BackButton from "@/components/Shared/BackButton";
 import NotLoggedIn from "@/components/Shared/NotLoggedIn";
 import PageLayout from "@/components/Shared/PageLayout";
+import { Card, CardHeader } from "@/components/Shared/UI";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import Choose from "./Choose";
-import Minting from "./Minting";
-import Success from "./Success";
-
-interface ENSCreateState {
-  chosenUsername: string;
-  screen: "choose" | "minting" | "success";
-  transactionHash: string;
-  setChosenUsername: (username: string) => void;
-  setScreen: (screen: "choose" | "minting" | "success") => void;
-  setTransactionHash: (hash: string) => void;
-}
-
-const store = create<ENSCreateState>((set) => ({
-  chosenUsername: "",
-  screen: "choose",
-  setChosenUsername: (username) => set({ chosenUsername: username }),
-  setScreen: (screen) => set({ screen }),
-  setTransactionHash: (hash) => set({ transactionHash: hash }),
-  transactionHash: ""
-}));
-
-export const useENSCreateStore = createTrackedSelector(store);
 
 const ENS = () => {
   const { currentAccount } = useAccountStore();
-  const { screen } = useENSCreateStore();
 
   if (!currentAccount) {
     return <NotLoggedIn />;
   }
 
   return (
-    <PageLayout title="Bookmarks">
-      {screen === "choose" && <Choose />}
-      {screen === "minting" && <Minting />}
-      {screen === "success" && <Success />}
+    <PageLayout title="ENS">
+      <Card>
+        <CardHeader icon={<BackButton path="/settings" />} title="ENS" />
+        <div className="space-y-3 p-5">
+          <p className="font-medium text-gray-900 text-sm dark:text-gray-100">
+            ENS claiming is being rebuilt for the Privy migration.
+          </p>
+          <p className="text-gray-500 text-sm dark:text-gray-400">
+            We are moving username and wallet identity flows away from Lens
+            before bringing ENS back.
+          </p>
+        </div>
+      </Card>
     </PageLayout>
   );
 };

@@ -28,23 +28,19 @@ import {
   type AccountFollowRules,
   AccountFollowRuleType,
   type AccountFragment,
-  useMeLazyQuery,
   useUpdateAccountFollowRulesMutation
 } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import type { ApolloClientError } from "@/types/errors";
 
 const SuperFollow = () => {
-  const { currentAccount, setCurrentAccount } = useAccountStore();
+  const { currentAccount } = useAccountStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState(0);
   const handleTransactionLifecycle = useTransactionLifecycle();
   const waitForTransactionToComplete = useWaitForTransactionToComplete();
   const inputRef = useRef<HTMLInputElement>(null);
   usePreventScrollOnNumberInput(inputRef as RefObject<HTMLInputElement>);
-  const [getCurrentAccountDetails] = useMeLazyQuery({
-    fetchPolicy: "no-cache"
-  });
 
   const account = currentAccount as AccountFragment;
   const simplePaymentRule = [
@@ -61,8 +57,6 @@ const SuperFollow = () => {
 
   const onCompleted = async (hash: string) => {
     await waitForTransactionToComplete(hash);
-    const accountData = await getCurrentAccountDetails();
-    setCurrentAccount(accountData?.data?.me.loggedInAs.account);
     location.reload();
   };
 

@@ -7,7 +7,7 @@ const links = [
   { href: "/privacy", label: "Privacy" },
   { href: "/guidelines", label: "Guidelines" },
   { href: "https://hey.xyz/discord", label: "Discord" },
-  { href: "/u/hey", label: "Every1" },
+  { href: "/@hey", label: "Every1" },
   { href: "https://github.com/bigint/hey", label: "GitHub" },
   { href: "/support", label: "Support" },
   { href: "https://hey.xyz/status", label: "Status" }

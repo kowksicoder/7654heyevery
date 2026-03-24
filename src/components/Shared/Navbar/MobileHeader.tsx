@@ -71,7 +71,7 @@ const MobileHeader = () => {
   const walletBadgeLabel = `${nFormatter(totalWalletBalance, 2) || "0"} ${NATIVE_TOKEN_SYMBOL}`;
 
   return (
-    <header className="sticky top-0 z-[6] bg-[#edf4ff] px-4 py-3 md:hidden dark:bg-black">
+    <header className="sticky top-0 z-[6] bg-gray-50 px-4 py-3 md:hidden dark:bg-black">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {currentAccount ? (

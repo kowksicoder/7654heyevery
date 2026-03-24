@@ -18,6 +18,8 @@ import cn from "@/helpers/cn";
 import formatAddress from "@/helpers/formatAddress";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
 import nFormatter from "@/helpers/nFormatter";
+import { getPublicExploreCoinOverrides } from "@/helpers/staff";
+import { hasSupabaseConfig } from "@/helpers/supabase";
 import type { ZoraFeedItem } from "./zoraHomeFeedConfig";
 
 const zoraApiKey = getZoraApiKey();
@@ -29,6 +31,7 @@ if (zoraApiKey) {
 const STORY_BAR_QUERY_KEY = "zora-home-story-bar";
 const STORY_PLACEHOLDER_COUNT = 10;
 const STORY_DURATION_MS = 5000;
+const STORY_FETCH_COUNT = 18;
 
 const formatUsdMetric = (value?: string) => {
   const number = Number.parseFloat(value ?? "");
@@ -87,42 +90,76 @@ const getCreatorHandle = (item: ZoraFeedItem) => {
 };
 
 const StoryCard = ({
+  compact = false,
   item,
   loading = false,
   onClick
 }: {
+  compact?: boolean;
   item?: ZoraFeedItem;
   loading?: boolean;
   onClick?: () => void;
 }) => {
+  const wrapperClassName = compact
+    ? "w-[4.25rem] shrink-0"
+    : "w-[4.25rem] shrink-0 md:w-[6.75rem]";
+  const avatarRingClassName = compact
+    ? "rounded-full border border-[#149c7a]/40 bg-[#daf8ef] p-[2px] shadow-[0_10px_20px_-18px_rgba(20,156,122,0.65)] dark:border-[#0f5a49]/80 dark:bg-[#101412]"
+    : "rounded-full border border-[#149c7a]/40 bg-[#daf8ef] p-[2px] shadow-[0_10px_20px_-18px_rgba(20,156,122,0.65)] md:p-[3px] dark:border-[#0f5a49]/80 dark:bg-[#101412]";
+  const avatarInnerClassName = compact
+    ? "rounded-full bg-white p-[2px] dark:bg-[#101412]"
+    : "rounded-full bg-white p-[2px] md:p-[3px] dark:bg-[#101412]";
+  const avatarClassName = compact
+    ? "size-[3.2rem] rounded-full object-cover"
+    : "size-[3.2rem] rounded-full object-cover md:size-[5.15rem]";
+  const placeholderAvatarClassName = compact
+    ? "size-[3.2rem] animate-pulse rounded-full bg-gray-200 dark:bg-white/10"
+    : "size-[3.2rem] animate-pulse rounded-full bg-gray-200 md:size-[5.15rem] dark:bg-white/10";
+  const badgeClassName = compact
+    ? "absolute bottom-0 rounded-full border border-[#0e5746]/25 bg-white px-1.25 py-0.25 font-semibold text-[#0d8f70] text-[9px] shadow-[0_8px_20px_-16px_rgba(0,0,0,0.8)] dark:border-[#0e5746]/70"
+    : "absolute bottom-0 rounded-full border border-[#0e5746]/25 bg-white px-1.25 py-0.25 font-semibold text-[#0d8f70] text-[9px] shadow-[0_8px_20px_-16px_rgba(0,0,0,0.8)] md:border-[#0e5746]/30 md:px-2.5 md:py-1 md:text-[13px] dark:border-[#0e5746]/70";
+  const labelClassName = compact
+    ? "mt-1 truncate px-0 text-center font-semibold text-[10px] text-gray-950 leading-3.5 tracking-[-0.01em] dark:text-white"
+    : "mt-1 truncate px-0 text-center font-semibold text-[10px] text-gray-950 leading-3.5 tracking-[-0.01em] md:mt-3 md:px-1 md:text-[15px] md:leading-normal md:tracking-normal dark:text-white";
+
   if (loading || !item) {
     return (
-      <div className="w-[4.85rem] shrink-0 md:w-[6.75rem]">
+      <div className={wrapperClassName}>
         <div className="relative flex justify-center">
-          <div className="rounded-full bg-gradient-to-b from-[#18c79a] via-[#114f43] to-[#08100d] p-[2.5px] md:p-[3px]">
-            <div className="rounded-full bg-white p-[2.5px] md:p-[3px] dark:bg-[#101412]">
-              <div className="size-[3.75rem] animate-pulse rounded-full bg-gray-200 md:size-[5.15rem] dark:bg-white/10" />
+          <div className={avatarRingClassName}>
+            <div className={avatarInnerClassName}>
+              <div className={placeholderAvatarClassName} />
             </div>
           </div>
-          <div className="absolute bottom-0 h-6 w-[4.15rem] animate-pulse rounded-full bg-white shadow-[0_8px_20px_-16px_rgba(0,0,0,0.24)] md:h-7 md:w-[5.25rem] dark:bg-white/10" />
+          <div
+            className={cn(
+              "absolute bottom-0 h-4.5 w-[3.1rem] animate-pulse rounded-full bg-white shadow-[0_8px_20px_-16px_rgba(0,0,0,0.24)] dark:bg-white/10",
+              compact ? "" : "md:h-7 md:w-[5.25rem]"
+            )}
+          />
         </div>
-        <div className="mx-auto mt-2.5 h-3.5 w-14 animate-pulse rounded-full bg-gray-200 md:mt-4 md:h-4 md:w-16 dark:bg-white/10" />
+        <div
+          className={cn(
+            "mx-auto mt-1.5 h-3 w-12 animate-pulse rounded-full bg-gray-200 dark:bg-white/10",
+            compact ? "" : "md:mt-4 md:h-4 md:w-16"
+          )}
+        />
       </div>
     );
   }
 
   return (
     <button
-      className="w-[4.85rem] shrink-0 text-left md:w-[6.75rem]"
+      className={cn(wrapperClassName, "text-left")}
       onClick={onClick}
       type="button"
     >
       <div className="relative flex justify-center">
-        <div className="rounded-full bg-gradient-to-b from-[#18c79a] via-[#114f43] to-[#08100d] p-[2.5px] shadow-[0_12px_28px_-18px_rgba(24,199,154,0.8)] md:p-[3px]">
-          <div className="rounded-full bg-white p-[2.5px] md:p-[3px] dark:bg-[#101412]">
+        <div className={avatarRingClassName}>
+          <div className={avatarInnerClassName}>
             <Image
               alt={getCreatorLabel(item)}
-              className="size-[3.75rem] rounded-full object-cover md:size-[5.15rem]"
+              className={avatarClassName}
               height={82}
               src={getCreatorAvatar(item)}
               width={82}
@@ -130,14 +167,10 @@ const StoryCard = ({
           </div>
         </div>
 
-        <div className="absolute bottom-0 rounded-full border border-[#0e5746] bg-white px-2 py-0.5 font-semibold text-[#0d8f70] text-[11px] shadow-[0_8px_20px_-16px_rgba(0,0,0,0.8)] md:px-2.5 md:py-1 md:text-[13px]">
-          {formatUsdMetric(item.marketCap)}
-        </div>
+        <div className={badgeClassName}>{formatUsdMetric(item.marketCap)}</div>
       </div>
 
-      <p className="mt-1.5 truncate px-0 text-center font-semibold text-[11px] text-gray-950 leading-4 tracking-[-0.01em] md:mt-3 md:px-1 md:text-[15px] md:leading-normal md:tracking-normal dark:text-white">
-        {getCreatorLabel(item)}
-      </p>
+      <p className={labelClassName}>{getCreatorLabel(item)}</p>
     </button>
   );
 };
@@ -197,7 +230,7 @@ const StoryViewer = ({
                       className="h-full w-full object-cover"
                       src={getCreatorCover(activeItem)}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/15 to-black/88" />
+                    <div className="absolute inset-0 bg-black/55" />
                   </div>
 
                   <div className="relative flex h-full flex-col p-4 md:p-5">
@@ -332,8 +365,13 @@ const StoryViewer = ({
   );
 };
 
-const Hero = () => {
+interface HeroProps {
+  variant?: "page" | "sidebar";
+}
+
+const Hero = ({ variant = "page" }: HeroProps) => {
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  const compact = variant === "sidebar";
 
   const { data, isLoading } = useQuery({
     queryFn: async () => {
@@ -342,16 +380,73 @@ const Hero = () => {
       }
 
       const response = await getMostValuableCreatorCoins({
-        count: STORY_PLACEHOLDER_COUNT
+        count: STORY_FETCH_COUNT
       });
       const edges = response.data?.exploreList?.edges ?? [];
-
-      return edges
+      const items = edges
         .map((edge) => edge.node)
         .filter(
           (item) =>
             !item.platformBlocked && !item.creatorProfile?.platformBlocked
         );
+
+      if (!hasSupabaseConfig()) {
+        return items.slice(0, STORY_PLACEHOLDER_COUNT);
+      }
+
+      const overrides = await getPublicExploreCoinOverrides().catch(() => []);
+      const hiddenAddresses = new Set(
+        overrides
+          .filter((override) => override.isHidden && override.coinAddress)
+          .map((override) => override.coinAddress?.toLowerCase())
+      );
+      const hiddenTickers = new Set(
+        overrides
+          .filter((override) => override.isHidden && override.ticker)
+          .map((override) => override.ticker?.toLowerCase())
+      );
+      const pinnedOverrides = overrides
+        .filter(
+          (override) => !override.isHidden && override.pinnedSlot !== null
+        )
+        .sort(
+          (a, b) =>
+            (a.pinnedSlot || Number.MAX_SAFE_INTEGER) -
+            (b.pinnedSlot || Number.MAX_SAFE_INTEGER)
+        );
+
+      const filteredItems = items.filter(
+        (item) =>
+          !hiddenAddresses.has(item.address.toLowerCase()) &&
+          !hiddenTickers.has(item.symbol?.toLowerCase?.() || "")
+      );
+
+      const orderedItems: ZoraFeedItem[] = [];
+      const seenAddresses = new Set<string>();
+
+      for (const override of pinnedOverrides) {
+        const match = filteredItems.find(
+          (item) =>
+            item.address.toLowerCase() ===
+              override.coinAddress?.toLowerCase() ||
+            (item.symbol?.toLowerCase?.() || "") ===
+              (override.ticker?.toLowerCase() || "")
+        );
+
+        if (match && !seenAddresses.has(match.address.toLowerCase())) {
+          seenAddresses.add(match.address.toLowerCase());
+          orderedItems.push(match);
+        }
+      }
+
+      for (const item of filteredItems) {
+        if (!seenAddresses.has(item.address.toLowerCase())) {
+          seenAddresses.add(item.address.toLowerCase());
+          orderedItems.push(item);
+        }
+      }
+
+      return orderedItems.slice(0, STORY_PLACEHOLDER_COUNT);
     },
     queryKey: [STORY_BAR_QUERY_KEY],
     staleTime: 60_000
@@ -387,16 +482,31 @@ const Hero = () => {
 
   return (
     <>
-      <section className="w-full rounded-none border border-gray-200/65 bg-white px-3 py-3 md:rounded-xl md:px-5 md:py-4 dark:border-gray-800/75 dark:bg-[#101412]">
-        <div className="no-scrollbar flex gap-3 overflow-x-auto pb-0.5 md:gap-5 md:pb-1">
+      <section
+        className={cn(
+          "w-full",
+          compact ? "px-0 py-0" : "-mt-1 px-2 py-2 md:mt-0 md:px-5 md:py-4"
+        )}
+      >
+        <div
+          className={cn(
+            "no-scrollbar flex overflow-x-auto pb-0.5",
+            compact ? "gap-2" : "gap-2 md:gap-5 md:pb-1"
+          )}
+        >
           {isLoading
             ? Array.from({ length: STORY_PLACEHOLDER_COUNT }).map(
                 (_, index) => (
-                  <StoryCard key={`story-placeholder-${index}`} loading />
+                  <StoryCard
+                    compact={compact}
+                    key={`story-placeholder-${index}`}
+                    loading
+                  />
                 )
               )
             : items.map((item, index) => (
                 <StoryCard
+                  compact={compact}
                   item={item}
                   key={item.id}
                   onClick={() => setActiveStoryIndex(index)}

@@ -13,6 +13,7 @@ import AccountPreview from "./AccountPreview";
 import FollowUnfollowButton from "./FollowUnfollowButton";
 
 interface SingleAccountProps {
+  followButtonClassName?: string;
   hideFollowButton?: boolean;
   hideUnfollowButton?: boolean;
   isBig?: boolean;
@@ -24,6 +25,7 @@ interface SingleAccountProps {
 }
 
 const SingleAccount = ({
+  followButtonClassName = "",
   hideFollowButton = false,
   hideUnfollowButton = false,
   isBig = false,
@@ -95,6 +97,7 @@ const SingleAccount = ({
         )}
         <FollowUnfollowButton
           account={account}
+          buttonClassName={followButtonClassName}
           hideFollowButton={hideFollowButton}
           hideUnfollowButton={hideUnfollowButton}
           small

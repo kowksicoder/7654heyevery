@@ -1,12 +1,14 @@
 import { BRAND_COLOR, STATIC_IMAGES_URL, TRANSFORMS } from "@/data/constants";
 import imageKit from "@/helpers//imageKit";
 import sanitizeDStorageUrl from "@/helpers//sanitizeDStorageUrl";
+import cn from "@/helpers/cn";
 
 interface CoverProps {
+  className?: string;
   cover: string;
 }
 
-const Cover = ({ cover }: CoverProps) => {
+const Cover = ({ className, cover }: CoverProps) => {
   const isDefaultCover = cover.includes(STATIC_IMAGES_URL);
   const backgroundImage = isDefaultCover
     ? `${STATIC_IMAGES_URL}/patterns/2.svg`
@@ -22,7 +24,10 @@ const Cover = ({ cover }: CoverProps) => {
 
   return (
     <div className="mx-auto">
-      <div className="h-52 sm:h-64 md:rounded-xl" style={backgroundStyles} />
+      <div
+        className={cn("h-52 sm:h-64 md:rounded-xl", className)}
+        style={backgroundStyles}
+      />
     </div>
   );
 };

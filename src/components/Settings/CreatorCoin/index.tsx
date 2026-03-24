@@ -1,4 +1,3 @@
-import CreatorCoinForm from "@/components/Settings/CreatorCoin/CreatorCoin";
 import BackButton from "@/components/Shared/BackButton";
 import NotLoggedIn from "@/components/Shared/NotLoggedIn";
 import PageLayout from "@/components/Shared/PageLayout";
@@ -19,8 +18,14 @@ const CreatorCoinSettings = () => {
           icon={<BackButton path="/settings" />}
           title="Creator Coin"
         />
-        <div className="p-5">
-          <CreatorCoinForm />
+        <div className="space-y-3 p-5">
+          <p className="font-medium text-gray-900 text-sm dark:text-gray-100">
+            Creator coin settings are being rebuilt for the Privy migration.
+          </p>
+          <p className="text-gray-500 text-sm dark:text-gray-400">
+            The old Lens metadata controls are temporarily disabled while we
+            move creator settings to Every1 + Privy.
+          </p>
         </div>
       </Card>
     </PageLayout>

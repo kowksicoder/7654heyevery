@@ -1,9 +1,8 @@
 import {
   ArrowRightIcon,
-  AtSymbolIcon,
   CreditCardIcon,
-  FingerPrintIcon,
-  PaintBrushIcon
+  PaintBrushIcon,
+  ShieldCheckIcon
 } from "@heroicons/react/24/outline";
 import { Link } from "react-router";
 import SingleAccount from "@/components/Shared/Account/SingleAccount";
@@ -33,14 +32,9 @@ const AccountSettings = () => {
       url: "/wallet"
     },
     {
-      icon: <AtSymbolIcon className="size-5" />,
-      title: "Username",
-      url: "/settings/username"
-    },
-    {
-      icon: <FingerPrintIcon className="size-5" />,
-      title: "Manager",
-      url: "/settings/manager"
+      icon: <ShieldCheckIcon className="size-5" />,
+      title: "Official profile",
+      url: "/settings/verification"
     }
   ];
 

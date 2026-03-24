@@ -9,5 +9,6 @@ export const Localstorage = {
   ProStore: "pro.store",
   ReloadTabs: "reload.tabs",
   SearchStore: "search.store",
+  StaffAdminStore: "staff-admin.store.v2",
   Theme: "theme"
 };

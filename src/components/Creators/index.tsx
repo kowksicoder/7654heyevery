@@ -1,4 +1,8 @@
-import { SparklesIcon, Squares2X2Icon } from "@heroicons/react/24/solid";
+import {
+  CheckBadgeIcon,
+  SparklesIcon,
+  Squares2X2Icon
+} from "@heroicons/react/24/solid";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import MetaTags from "@/components/Common/MetaTags";
@@ -91,6 +95,9 @@ const MobileCreatorCard = ({ creator }: { creator: FeaturedCreatorEntry }) => {
             <p className="truncate font-semibold text-[15px] text-gray-900 dark:text-white">
               {creator.name}
             </p>
+            {creator.isOfficial ? (
+              <CheckBadgeIcon className="size-4 shrink-0 text-brand-500" />
+            ) : null}
             {ticker ? (
               <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-[10px] text-gray-600 dark:bg-[#101011] dark:text-[#c9c9cf]">
                 {ticker}
@@ -144,6 +151,9 @@ const CreatorRow = ({ creator }: { creator: FeaturedCreatorEntry }) => {
               <p className="truncate font-semibold text-gray-950 text-lg dark:text-gray-50">
                 {creator.name}
               </p>
+              {creator.isOfficial ? (
+                <CheckBadgeIcon className="size-4 shrink-0 text-brand-500" />
+              ) : null}
               {ticker ? (
                 <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-[10px] text-gray-600 dark:bg-gray-900 dark:text-gray-300">
                   {ticker}
@@ -282,6 +292,7 @@ const Creators = () => {
     <>
       <MetaTags
         description="Track Zora's weekly featured creators with live creator coin market caps, volume, holders, and 24 hour movement."
+        image={data[0]?.avatar || "/evlogo.jpg"}
         title="Creators"
       />
       <main className="mt-0 mb-16 min-w-0 flex-1 md:mt-5 md:mb-5">

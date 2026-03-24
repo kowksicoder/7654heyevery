@@ -6,6 +6,7 @@ import {
   TrophyIcon as LeaderboardOutline,
   FlagIcon as MissionsOutline,
   GiftIcon as ReferralsOutline,
+  ShieldCheckIcon as StaffOutline,
   ArrowsRightLeftIcon as SwapOutline,
   UserGroupIcon as UserGroupOutline
 } from "@heroicons/react/24/outline";
@@ -16,6 +17,7 @@ import {
   TrophyIcon as LeaderboardSolid,
   FlagIcon as MissionsSolid,
   GiftIcon as ReferralsSolid,
+  ShieldCheckIcon as StaffSolid,
   ArrowsRightLeftIcon as SwapSolid,
   UserGroupIcon as UserGroupSolid
 } from "@heroicons/react/24/solid";
@@ -37,13 +39,14 @@ import {
 import { Image, Spinner, Tooltip } from "@/components/Shared/UI";
 import useEvery1MobileNavBadgeCounts from "@/hooks/useEvery1MobileNavBadgeCounts";
 import useHasNewNotifications from "@/hooks/useHasNewNotifications";
+import useOpenAuth from "@/hooks/useOpenAuth";
 import {
   GroupsDocument,
   NotificationIndicatorDocument,
   NotificationsDocument
 } from "@/indexer/generated";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
+import useStaffAdminStore from "@/store/persisted/useStaffAdminStore";
 import SignedAccount from "./SignedAccount";
 
 const navigationItems = {
@@ -89,6 +92,11 @@ const navigationItems = {
     solid: <ReferralsSolid className="size-6" />,
     title: "Referrals"
   },
+  "/staff": {
+    outline: <StaffOutline className="size-6" />,
+    solid: <StaffSolid className="size-6" />,
+    title: "Admin"
+  },
   "/swap": {
     outline: <SwapOutline className="size-6" />,
     solid: <SwapSolid className="size-6" />,
@@ -112,6 +120,7 @@ const NavItem = memo(({ icon, onClick, url }: NavItemProps) => (
 
 const NavItems = memo(({ isLoggedIn }: { isLoggedIn: boolean }) => {
   const { pathname } = useLocation();
+  const { sessionToken } = useStaffAdminStore();
   const { creatorsCount, exploreCount } = useEvery1MobileNavBadgeCounts();
   const hasNewNotifications = useHasNewNotifications();
   const client = useApolloClient();
@@ -137,6 +146,7 @@ const NavItems = memo(({ isLoggedIn }: { isLoggedIn: boolean }) => {
     "/swap",
     "/referrals",
     "/missions",
+    ...(sessionToken ? ["/staff"] : []),
     ...(isLoggedIn ? ["/notifications", "/groups"] : [])
   ];
 
@@ -229,7 +239,7 @@ const NavItems = memo(({ isLoggedIn }: { isLoggedIn: boolean }) => {
 const Navbar = () => {
   const { pathname } = useLocation();
   const { currentAccount } = useAccountStore();
-  const { setShowAuthModal } = useAuthModalStore();
+  const openAuth = useOpenAuth();
 
   const handleLogoClick = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -242,8 +252,8 @@ const Navbar = () => {
   );
 
   const handleAuthClick = useCallback(() => {
-    setShowAuthModal(true);
-  }, []);
+    void openAuth("open_login");
+  }, [openAuth]);
 
   return (
     <aside className="sticky top-5 mt-5 hidden w-10 shrink-0 flex-col items-center gap-y-5 md:flex">

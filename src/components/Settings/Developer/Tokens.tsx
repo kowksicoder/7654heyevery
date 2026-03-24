@@ -1,130 +1,105 @@
-import { useCallback, useState } from "react";
-import { toast } from "sonner";
-import { useAccount, useSignMessage } from "wagmi";
+import { CheckCircleIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
+import { usePrivy } from "@privy-io/react-auth";
 import BackButton from "@/components/Shared/BackButton";
 import { Button, Card, CardHeader, H6 } from "@/components/Shared/UI";
-import { ERRORS } from "@/data/errors";
-import errorToast from "@/helpers/errorToast";
+import formatAddress from "@/helpers/formatAddress";
+import { getPrivyDisplayName, getPrivyWalletAddress } from "@/helpers/privy";
 import useCopyToClipboard from "@/hooks/useCopyToClipboard";
-import useHandleWrongNetwork from "@/hooks/useHandleWrongNetwork";
-import {
-  useAuthenticateMutation,
-  useChallengeMutation
-} from "@/indexer/generated";
-import { hydrateAuthTokens } from "@/store/persisted/useAuthStore";
-import type { ApolloClientError } from "@/types/errors";
 
 const Tokens = () => {
-  const { accessToken, refreshToken } = hydrateAuthTokens();
-  const [builderToken, setBuilderToken] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const copyAccessToken = useCopyToClipboard(
-    accessToken as string,
-    "Copied to clipboard"
-  );
-  const copyRefreshToken = useCopyToClipboard(
-    refreshToken as string,
-    "Copied to clipboard"
-  );
-  const copyBuilderToken = useCopyToClipboard(
-    builderToken ?? "",
-    "Copied to clipboard"
-  );
-
-  const { address } = useAccount();
-  const handleWrongNetwork = useHandleWrongNetwork();
-
-  const onError = useCallback((error: ApolloClientError) => {
-    setIsSubmitting(false);
-    errorToast(error);
-  }, []);
-
-  const { signMessageAsync } = useSignMessage({
-    mutation: { onError }
-  });
-  const [loadChallenge] = useChallengeMutation();
-  const [authenticate] = useAuthenticateMutation();
-
-  const handleGenerateBuilderToken = async () => {
-    try {
-      setIsSubmitting(true);
-      await handleWrongNetwork();
-
-      const challenge = await loadChallenge({
-        variables: { request: { builder: { address } } }
-      });
-
-      if (!challenge?.data?.challenge?.text) {
-        return toast.error(ERRORS.SomethingWentWrong);
-      }
-
-      // Get signature
-      const signature = await signMessageAsync({
-        message: challenge?.data?.challenge?.text
-      });
-
-      // Auth account
-      const auth = await authenticate({
-        variables: { request: { id: challenge.data.challenge.id, signature } }
-      });
-
-      if (auth.data?.authenticate.__typename === "AuthenticationTokens") {
-        setBuilderToken(auth.data?.authenticate.accessToken);
-      }
-    } catch (error) {
-      errorToast(error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const { authenticated, ready, user } = usePrivy();
+  const displayName = getPrivyDisplayName(user) || "Every1 user";
+  const walletAddress = getPrivyWalletAddress(user);
+  const emailAddress = user?.email?.address || null;
+  const copyWallet = useCopyToClipboard(walletAddress ?? "", "Wallet copied");
+  const copyEmail = useCopyToClipboard(emailAddress ?? "", "Email copied");
+  const copyUserId = useCopyToClipboard(user?.id ?? "", "User ID copied");
 
   return (
     <Card>
-      <CardHeader
-        icon={<BackButton path="/settings" />}
-        title="Your temporary access token"
-      />
-      <div className="m-5 space-y-5">
-        <div className="flex flex-col gap-y-3">
-          <b>Your temporary access token</b>
+      <CardHeader icon={<BackButton path="/settings" />} title="Developer" />
+      <div className="space-y-5 p-5">
+        <div className="space-y-2">
+          <p className="font-semibold text-gray-900 text-sm dark:text-gray-100">
+            Lens developer tokens are no longer used in the active auth flow.
+          </p>
+          <p className="text-gray-500 text-sm dark:text-gray-400">
+            Every1 now authenticates through Privy. This screen shows the live
+            Privy session details instead.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+            <div className="text-gray-500 text-xs dark:text-gray-400">
+              Session
+            </div>
+            <div className="mt-1 flex items-center gap-2 font-medium text-gray-900 text-sm dark:text-gray-100">
+              <CheckCircleIcon className="size-4 text-green-600 dark:text-green-400" />
+              {ready ? (authenticated ? "Active" : "Signed out") : "Loading"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+            <div className="text-gray-500 text-xs dark:text-gray-400">
+              Profile
+            </div>
+            <div className="mt-1 font-medium text-gray-900 text-sm dark:text-gray-100">
+              {displayName}
+            </div>
+          </div>
+        </div>
+
+        {walletAddress ? (
           <button
-            className="cursor-pointer break-all rounded-md bg-gray-300 p-2 px-3 text-left dark:bg-gray-600"
-            onClick={copyAccessToken}
+            className="w-full cursor-pointer rounded-xl border border-gray-200 bg-gray-50 p-3 text-left dark:border-gray-800 dark:bg-gray-900"
+            onClick={copyWallet}
             type="button"
           >
-            <H6>{accessToken}</H6>
+            <div className="text-gray-500 text-xs dark:text-gray-400">
+              Wallet
+            </div>
+            <H6>{formatAddress(walletAddress, 6)}</H6>
           </button>
-        </div>
-        <div className="flex flex-col gap-y-3">
-          <b>Your temporary refresh token</b>
+        ) : null}
+
+        {emailAddress ? (
           <button
-            className="cursor-pointer break-all rounded-md bg-gray-300 p-2 px-3 text-left dark:bg-gray-600"
-            onClick={copyRefreshToken}
+            className="flex w-full items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-left dark:border-gray-800 dark:bg-gray-900"
+            onClick={copyEmail}
             type="button"
           >
-            <H6>{refreshToken}</H6>
+            <EnvelopeIcon className="mt-0.5 size-4 shrink-0 text-gray-500 dark:text-gray-400" />
+            <div className="min-w-0">
+              <div className="text-gray-500 text-xs dark:text-gray-400">
+                Email
+              </div>
+              <H6 className="truncate">{emailAddress}</H6>
+            </div>
           </button>
-        </div>
-        <div className="flex flex-col gap-y-3">
-          <b>Your temporary builder token</b>
-          <Button
-            disabled={isSubmitting}
-            loading={isSubmitting}
-            onClick={handleGenerateBuilderToken}
-          >
-            Generate builder token
-          </Button>
-          {builderToken && (
+        ) : null}
+
+        {user?.id ? (
+          <div className="space-y-2">
+            <div className="text-gray-500 text-xs dark:text-gray-400">
+              Privy user ID
+            </div>
             <button
-              className="mt-5 cursor-pointer break-all rounded-md bg-gray-300 p-2 px-3 text-left dark:bg-gray-600"
-              onClick={copyBuilderToken}
+              className="w-full cursor-pointer rounded-xl border border-gray-200 bg-gray-50 p-3 text-left dark:border-gray-800 dark:bg-gray-900"
+              onClick={copyUserId}
               type="button"
             >
-              <H6>{builderToken}</H6>
+              <H6>{user.id}</H6>
             </button>
-          )}
-        </div>
+          </div>
+        ) : null}
+
+        <Button
+          className="w-full"
+          disabled={!walletAddress}
+          onClick={copyWallet}
+        >
+          Copy active wallet
+        </Button>
       </div>
     </Card>
   );

@@ -1,6 +1,7 @@
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
+import { usePrivy } from "@privy-io/react-auth";
 import { useIsClient } from "@uidotdev/usehooks";
-import { memo, useCallback, useEffect } from "react";
+import { memo, useEffect, useMemo } from "react";
 import { Outlet, useLocation } from "react-router";
 import { Toaster, type ToasterProps } from "sonner";
 import FullPageLoader from "@/components/Shared/FullPageLoader";
@@ -10,11 +11,17 @@ import Navbar from "@/components/Shared/Navbar";
 import BottomNavigation from "@/components/Shared/Navbar/BottomNavigation";
 import MobileHeader from "@/components/Shared/Navbar/MobileHeader";
 import { Spinner } from "@/components/Shared/UI";
-import reloadAllTabs from "@/helpers/reloadAllTabs";
+import { HomeFeedView } from "@/data/enums";
+import cn from "@/helpers/cn";
+import {
+  buildAccountFromPrivyUser,
+  hasPrivyConfig,
+  mergeEvery1ProfileIntoAccount
+} from "@/helpers/privy";
 import { useTheme } from "@/hooks/useTheme";
-import { useMeQuery } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import { hydrateAuthTokens, signOut } from "@/store/persisted/useAuthStore";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
+import { useHomeTabStore } from "@/store/persisted/useHomeTabStore";
 import Every1RuntimeBridge from "./Every1RuntimeBridge";
 import ReloadTabsWatcher from "./ReloadTabsWatcher";
 
@@ -22,29 +29,69 @@ const Layout = () => {
   const { pathname } = useLocation();
   const { theme } = useTheme();
   const { currentAccount, setCurrentAccount } = useAccountStore();
+  const { profile } = useEvery1Store();
+  const { viewMode } = useHomeTabStore();
   const isMounted = useIsClient();
-  const { accessToken } = hydrateAuthTokens();
+  const { authenticated, ready, user } = usePrivy();
+  const isStaffRoute = pathname.startsWith("/staff");
+  const isHomeReelMode = pathname === "/" && viewMode === HomeFeedView.LIST;
+  const hideMobileHeader =
+    isStaffRoute || pathname.startsWith("/coins/") || isHomeReelMode;
+  const hideBottomNavigation = isStaffRoute || isHomeReelMode;
+  const privyAccount = useMemo(() => {
+    const baseAccount = user ? buildAccountFromPrivyUser(user) : undefined;
+
+    if (!baseAccount) {
+      return undefined;
+    }
+
+    const profileMatchesWallet =
+      profile?.walletAddress &&
+      profile.walletAddress.toLowerCase() === baseAccount.owner.toLowerCase();
+
+    return profileMatchesWallet
+      ? mergeEvery1ProfileIntoAccount(baseAccount, profile)
+      : baseAccount;
+  }, [profile, user]);
+  const hasPrivy = hasPrivyConfig();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
 
-  const onError = useCallback(() => {
-    signOut();
-    reloadAllTabs();
-  }, []);
+  useEffect(() => {
+    if (!hasPrivy || !ready) {
+      return;
+    }
 
-  const { loading } = useMeQuery({
-    onCompleted: ({ me }) => {
-      setCurrentAccount(me.loggedInAs.account);
-    },
-    onError,
-    skip: !accessToken
-  });
+    if (!authenticated || !privyAccount) {
+      if (currentAccount) {
+        setCurrentAccount(undefined);
+      }
+      return;
+    }
 
-  const accountLoading = !currentAccount && loading;
+    if (
+      currentAccount?.address !== privyAccount.address ||
+      currentAccount?.metadata?.name !== privyAccount.metadata?.name ||
+      currentAccount?.metadata?.picture !== privyAccount.metadata?.picture ||
+      currentAccount?.metadata?.bio !== privyAccount.metadata?.bio ||
+      currentAccount?.username?.value !== privyAccount.username?.value
+    ) {
+      setCurrentAccount(privyAccount);
+    }
+  }, [
+    authenticated,
+    currentAccount,
+    hasPrivy,
+    privyAccount,
+    ready,
+    setCurrentAccount
+  ]);
 
-  if (accountLoading || !isMounted) {
+  const accountLoading = !isMounted || (hasPrivy && !ready);
+
+  if (accountLoading) {
     return <FullPageLoader />;
   }
 
@@ -59,19 +106,24 @@ const Layout = () => {
         position="bottom-right"
         theme={theme as ToasterProps["theme"]}
         toastOptions={{
-          className: "font-platform",
-          style: { boxShadow: "none", fontSize: "16px" }
+          className: "every1-toast font-platform",
+          style: { boxShadow: "none" }
         }}
       />
       <GlobalModals />
       <GlobalAlerts />
       <ReloadTabsWatcher />
       <Every1RuntimeBridge />
-      <MobileHeader />
-      <div className="mx-auto flex w-full max-w-6xl items-start gap-x-8 px-0 md:px-5">
-        <Navbar />
+      {hideMobileHeader ? null : <MobileHeader />}
+      <div
+        className={cn("mx-auto flex w-full items-start px-0 md:px-5", {
+          "max-w-[92rem]": isStaffRoute,
+          "max-w-6xl gap-x-8": !isStaffRoute
+        })}
+      >
+        {isStaffRoute ? null : <Navbar />}
         <Outlet />
-        <BottomNavigation />
+        {hideBottomNavigation ? null : <BottomNavigation />}
       </div>
     </>
   );

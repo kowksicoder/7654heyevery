@@ -6,6 +6,7 @@ import {
 } from "react-router";
 import ViewAccount from "@/components/Account";
 import Bookmarks from "@/components/Bookmarks";
+import Coin from "@/components/Coin";
 import Layout from "@/components/Common/Layout";
 import Create from "@/components/Create";
 import Creators from "@/components/Creators";
@@ -39,6 +40,7 @@ import { default as AccountPersonalizeSettings } from "@/components/Settings/Per
 import ProSettings from "@/components/Settings/Pro";
 import SessionsSettings from "@/components/Settings/Sessions";
 import UsernameSettings from "@/components/Settings/Username";
+import VerificationSettings from "@/components/Settings/Verification";
 import Custom404 from "@/components/Shared/404";
 import Showcase from "@/components/Showcase";
 import ShowcaseDetail from "@/components/Showcase/Detail";
@@ -55,6 +57,7 @@ const Routes = () => {
         <Route element={<Layout />} path="/">
           <Route element={<Home />} index />
           <Route element={<Navigate replace to="/" />} path="explore" />
+          <Route element={<Coin />} path="coins/:address" />
           <Route element={<FundsSettings />} path="wallet" />
           <Route element={<Creators />} path="creators" />
           <Route element={<Leaderboard />} path="leaderboard" />
@@ -69,6 +72,7 @@ const Routes = () => {
           <Route element={<Bookmarks />} path="bookmarks" />
           <Route element={<ENS />} path="ens" />
           <Route element={<Notification />} path="notifications" />
+          <Route element={<ViewAccount />} path="@:username" />
           <Route element={<ViewAccount />} path="account/:address" />
           <Route element={<ViewAccount />} path="u/:username" />
           <Route path="g/:address">
@@ -103,6 +107,7 @@ const Routes = () => {
             <Route element={<ManagerSettings />} path="manager" />
             <Route element={<SessionsSettings />} path="sessions" />
             <Route element={<UsernameSettings />} path="username" />
+            <Route element={<VerificationSettings />} path="verification" />
           </Route>
           <Route path="staff">
             <Route element={<Staff />} index />

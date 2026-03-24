@@ -1,7 +1,7 @@
 import { type MouseEvent, useCallback } from "react";
 import evLogo from "@/assets/fonts/evlogo.jpg";
 import { Button } from "@/components/Shared/UI";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import useOpenAuth from "@/hooks/useOpenAuth";
 
 interface LoginButtonProps {
   className?: string;
@@ -14,13 +14,15 @@ const LoginButton = ({
   isBig = false,
   title = "Login"
 }: LoginButtonProps) => {
-  const { setShowAuthModal } = useAuthModalStore();
+  const openAuth = useOpenAuth();
 
-  const handleClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    umami.track("open_login");
-    return setShowAuthModal(true);
-  }, []);
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      void openAuth("open_login");
+    },
+    [openAuth]
+  );
 
   return (
     <Button

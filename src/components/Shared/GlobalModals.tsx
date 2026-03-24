@@ -2,13 +2,11 @@ import NewPublication from "@/components/Composer/NewPublication";
 import SuperFollow from "@/components/Shared/Account/SuperFollow";
 import SwitchAccounts from "@/components/Shared/Account/SwitchAccounts";
 import TopUp from "@/components/Shared/Account/TopUp";
-import { useSignupStore } from "@/components/Shared/Auth/Signup";
 import SuperJoin from "@/components/Shared/Group/SuperJoin";
 import ReportAccount from "@/components/Shared/Modal/ReportAccount";
 import ReportPost from "@/components/Shared/Modal/ReportPost";
 import Subscribe from "@/components/Shared/Modal/Subscribe";
 import { Modal } from "@/components/Shared/UI";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
 import { useFundModalStore } from "@/store/non-persisted/modal/useFundModalStore";
 import { useNewPostModalStore } from "@/store/non-persisted/modal/useNewPostModalStore";
 import { useProModalStore } from "@/store/non-persisted/modal/useProModalStore";
@@ -19,7 +17,6 @@ import { useSuperJoinModalStore } from "@/store/non-persisted/modal/useSuperJoin
 import { useSwitchAccountModalStore } from "@/store/non-persisted/modal/useSwitchAccountModalStore";
 import { usePostAttachmentStore } from "@/store/non-persisted/post/usePostAttachmentStore";
 import { usePostStore } from "@/store/non-persisted/post/usePostStore";
-import Auth from "./Auth";
 
 const GlobalModals = () => {
   const { setShow: setShowSwitchAccountModal, show: showSwitchAccountModal } =
@@ -29,8 +26,6 @@ const GlobalModals = () => {
   const { editingPost, setEditingPost, setQuotedPost, setPostContent } =
     usePostStore();
   const { setAttachments } = usePostAttachmentStore();
-  const { authModalType, showAuthModal, setShowAuthModal } =
-    useAuthModalStore();
   const {
     reportingAccount,
     showReportAccountModal,
@@ -47,14 +42,6 @@ const GlobalModals = () => {
     superFollowingAccount
   } = useSuperFollowModalStore();
   const { show: showProModal, setShow: setShowProModal } = useProModalStore();
-  const { screen: signupScreen } = useSignupStore();
-
-  const authModalTitle =
-    authModalType === "signup"
-      ? signupScreen === "choose"
-        ? "Signup"
-        : null
-      : "Login";
 
   return (
     <>
@@ -76,16 +63,9 @@ const GlobalModals = () => {
         onClose={() => setShowSwitchAccountModal(false)}
         show={showSwitchAccountModal}
         size="xs"
-        title="Switch Account"
+        title="Manage Wallets"
       >
         <SwitchAccounts />
-      </Modal>
-      <Modal
-        onClose={() => setShowAuthModal(false, authModalType)}
-        show={showAuthModal}
-        title={authModalTitle}
-      >
-        <Auth />
       </Modal>
       <Modal
         onClose={() => {

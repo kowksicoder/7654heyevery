@@ -1,13 +1,22 @@
-import { useApolloClient } from "@apollo/client";
-import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/Shared/UI";
-import { ERRORS } from "@/data/errors";
-import errorToast from "@/helpers/errorToast";
-import useTransactionLifecycle from "@/hooks/useTransactionLifecycle";
-import { type AccountFragment, useFollowMutation } from "@/indexer/generated";
-import { useAuthModalStore } from "@/store/non-persisted/modal/useAuthModalStore";
+import {
+  EVERY1_FOLLOW_LIST_QUERY_KEY,
+  EVERY1_FOLLOW_RELATIONSHIP_QUERY_KEY,
+  EVERY1_FOLLOW_STATS_QUERY_KEY,
+  EVERY1_NOTIFICATION_COUNT_QUERY_KEY,
+  EVERY1_NOTIFICATIONS_QUERY_KEY,
+  EVERY1_PROFILE_QUERY_KEY,
+  ensureEvery1ProfileForAccount,
+  followProfile,
+  syncEvery1Profile
+} from "@/helpers/every1";
+import useOpenAuth from "@/hooks/useOpenAuth";
+import type { AccountFragment } from "@/indexer/generated";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
-import type { ApolloClientError } from "@/types/errors";
+import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 
 interface FollowProps {
   onFollow?: () => void;
@@ -24,67 +33,58 @@ const Follow = ({
   small,
   title = "Follow"
 }: FollowProps) => {
+  const queryClient = useQueryClient();
   const { currentAccount } = useAccountStore();
-  const { setShowAuthModal } = useAuthModalStore();
+  const { profile, setProfile } = useEvery1Store();
+  const openAuth = useOpenAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { cache } = useApolloClient();
-  const handleTransactionLifecycle = useTransactionLifecycle();
-
-  const updateCache = () => {
-    if (!account.operations) {
-      return;
-    }
-
-    cache.modify({
-      fields: { isFollowedByMe: () => true },
-      id: cache.identify(account.operations)
-    });
-  };
-
-  const onCompleted = () => {
-    updateCache();
-    setIsSubmitting(false);
-    onFollow?.();
-  };
-
-  const onError = useCallback((error: ApolloClientError) => {
-    setIsSubmitting(false);
-    errorToast(error);
-  }, []);
-
-  const [follow] = useFollowMutation({
-    onCompleted: async ({ follow }) => {
-      if (follow.__typename === "FollowResponse") {
-        return onCompleted();
-      }
-
-      if (follow.__typename === "AccountFollowOperationValidationFailed") {
-        return onError({
-          message: follow.reason,
-          name: ERRORS.SomethingWentWrong
-        });
-      }
-
-      return await handleTransactionLifecycle({
-        onCompleted,
-        onError,
-        transactionData: follow
-      });
-    },
-    onError
-  });
 
   const handleCreateFollow = async () => {
     if (!currentAccount) {
-      return setShowAuthModal(true);
+      return void openAuth("open_login");
     }
 
     setIsSubmitting(true);
     umami.track("follow");
 
-    return await follow({
-      variables: { request: { account: account.address } }
-    });
+    try {
+      const viewerProfile =
+        profile || (await syncEvery1Profile(currentAccount));
+      const targetProfile = await ensureEvery1ProfileForAccount(account);
+
+      if (!profile?.id || profile.id !== viewerProfile.id) {
+        setProfile(viewerProfile);
+      }
+
+      await followProfile(viewerProfile.id, targetProfile.id);
+      onFollow?.();
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_PROFILE_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_RELATIONSHIP_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_STATS_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_FOLLOW_LIST_QUERY_KEY]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATIONS_QUERY_KEY, targetProfile.id]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATION_COUNT_QUERY_KEY, targetProfile.id]
+        })
+      ]);
+    } catch (error) {
+      console.error("Failed to follow profile", error);
+      toast.error("Couldn't follow this profile");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

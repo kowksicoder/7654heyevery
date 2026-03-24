@@ -9,6 +9,7 @@ interface Tokens {
 
 interface State {
   accessToken: Tokens["accessToken"];
+  clearTokens: () => void;
   hydrateAuthTokens: () => Tokens;
   refreshToken: Tokens["refreshToken"];
   signIn: (tokens: { accessToken: string; refreshToken: string }) => void;
@@ -18,6 +19,7 @@ interface State {
 const { store } = createPersistedTrackedStore<State>(
   (set, get) => ({
     accessToken: null,
+    clearTokens: () => set({ accessToken: null, refreshToken: null }),
     hydrateAuthTokens: () => {
       const { accessToken, refreshToken } = get();
       return { accessToken, refreshToken };
@@ -35,4 +37,5 @@ const { store } = createPersistedTrackedStore<State>(
 export const signIn = (tokens: { accessToken: string; refreshToken: string }) =>
   store.getState().signIn(tokens);
 export const signOut = () => store.getState().signOut();
+export const clearAuthTokens = () => store.getState().clearTokens();
 export const hydrateAuthTokens = () => store.getState().hydrateAuthTokens();

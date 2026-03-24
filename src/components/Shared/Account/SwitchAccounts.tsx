@@ -1,122 +1,161 @@
-import { CheckCircleIcon } from "@heroicons/react/24/solid";
-import { useCallback, useState } from "react";
-import { useAccount } from "wagmi";
-import Loader from "@/components/Shared/Loader";
-import { ErrorMessage, Spinner, WarningMessage } from "@/components/Shared/UI";
-import { ERRORS } from "@/data/errors";
-import cn from "@/helpers/cn";
-import errorToast from "@/helpers/errorToast";
-import reloadAllTabs from "@/helpers/reloadAllTabs";
 import {
-  ManagedAccountsVisibility,
-  useAccountsAvailableQuery,
-  useSwitchAccountMutation
-} from "@/indexer/generated";
-import { useAccountStore } from "@/store/persisted/useAccountStore";
-import { signIn } from "@/store/persisted/useAuthStore";
-import SmallSingleAccount from "./SmallSingleAccount";
+  CheckCircleIcon,
+  EnvelopeIcon,
+  LinkIcon,
+  PlusIcon,
+  WalletIcon
+} from "@heroicons/react/24/outline";
+import { usePrivy } from "@privy-io/react-auth";
+import { Button, WarningMessage } from "@/components/Shared/UI";
+import formatAddress from "@/helpers/formatAddress";
+import { getPrivyWalletAddress } from "@/helpers/privy";
 
 const SwitchAccounts = () => {
-  const { currentAccount } = useAccountStore();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loggingInAccountId, setLoggingInAccountId] = useState<null | string>(
-    null
+  const { authenticated, connectWallet, linkWallet, login, ready, user } =
+    usePrivy();
+  const primaryWallet = getPrivyWalletAddress(user);
+  const wallets = Array.from(
+    new Set(
+      (user?.linkedAccounts || [])
+        .map((account) => {
+          if (
+            account.type === "wallet" &&
+            account.chainType === "ethereum" &&
+            "address" in account
+          ) {
+            return account.address;
+          }
+
+          return null;
+        })
+        .filter((address): address is string => Boolean(address))
+    )
   );
-  const { address } = useAccount();
+  const email = user?.email?.address;
 
-  const onError = useCallback((error?: unknown) => {
-    setIsSubmitting(false);
-    setLoggingInAccountId(null);
-    errorToast(error);
-  }, []);
+  if (!ready) {
+    return (
+      <div className="p-5 text-center text-gray-500 text-sm dark:text-gray-400">
+        Loading Privy wallets...
+      </div>
+    );
+  }
 
-  const { data, error, loading } = useAccountsAvailableQuery({
-    skip: !address,
-    variables: {
-      accountsAvailableRequest: {
-        hiddenFilter: ManagedAccountsVisibility.NoneHidden,
-        managedBy: address
-      },
-      lastLoggedInAccountRequest: { address: address }
-    }
-  });
-  const [switchAccount] = useSwitchAccountMutation();
-
-  if (!address) {
+  if (!authenticated || !user) {
     return (
       <WarningMessage
         className="m-5"
-        message="Connect your wallet to switch accounts"
-        title="No wallet connected"
+        message="Sign in with Privy to manage your connected wallets."
+        title="Not logged in"
       />
     );
   }
 
-  if (loading) {
-    return <Loader className="my-5" message="Loading Accounts" />;
-  }
-
-  const accountsAvailable = data?.accountsAvailable.items || [];
-
-  const handleSwitchAccount = async (account: string) => {
-    try {
-      setLoggingInAccountId(account);
-      setIsSubmitting(true);
-      umami.track("switch_account");
-
-      const auth = await switchAccount({ variables: { request: { account } } });
-
-      if (auth.data?.switchAccount.__typename === "AuthenticationTokens") {
-        const accessToken = auth.data?.switchAccount.accessToken;
-        const refreshToken = auth.data?.switchAccount.refreshToken;
-        // Preserve theme and other local UI state by not signing out completely.
-        signIn({ accessToken, refreshToken });
-        reloadAllTabs();
-        return;
-      }
-
-      return onError({ message: ERRORS.SomethingWentWrong });
-    } catch {
-      onError();
-    }
-  };
-
   return (
-    <div className="max-h-[80vh] overflow-y-auto p-2">
-      <ErrorMessage
-        className="m-2"
-        error={error}
-        title="Failed to load accounts"
-      />
-      {accountsAvailable.map((accountAvailable, index) => (
-        <button
-          className="flex w-full cursor-pointer items-center justify-between space-x-2 rounded-lg py-3 pr-4 pl-3 text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-          disabled={
-            currentAccount?.address === accountAvailable.account.address
-          }
-          key={accountAvailable?.account.address}
-          onClick={async () => {
-            const selectedAccount = accountsAvailable[index].account;
-            await handleSwitchAccount(selectedAccount.address);
-          }}
-          type="button"
-        >
-          <div
-            className={cn(
-              currentAccount?.address === accountAvailable.account.address &&
-                "font-bold"
-            )}
-          >
-            <SmallSingleAccount account={accountAvailable.account} />
+    <div className="space-y-4 p-5">
+      <div className="space-y-1">
+        <p className="text-gray-500 text-sm dark:text-gray-400">
+          One Every1 account can be linked to multiple wallets through Privy.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {primaryWallet ? (
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="rounded-full bg-green-100 p-2 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                <WalletIcon className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium text-gray-900 text-sm dark:text-gray-100">
+                  {formatAddress(primaryWallet)}
+                </div>
+                <div className="text-gray-500 text-xs dark:text-gray-400">
+                  Active wallet
+                </div>
+              </div>
+            </div>
+            <span className="rounded-full bg-green-100 px-2 py-1 font-medium text-[11px] text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              Connected
+            </span>
           </div>
-          {isSubmitting &&
-          accountAvailable.account.address === loggingInAccountId ? (
-            <Spinner size="xs" />
-          ) : currentAccount?.address === accountAvailable.account.address ? (
-            <CheckCircleIcon className="size-5 text-green-600" />
-          ) : null}
-        </button>
-      ))}
+        ) : (
+          <div className="rounded-xl border border-gray-300 border-dashed px-3 py-3 text-gray-500 text-sm dark:border-gray-700 dark:text-gray-400">
+            No wallet linked yet.
+          </div>
+        )}
+
+        {wallets
+          .filter((wallet) => wallet !== primaryWallet)
+          .map((wallet) => (
+            <div
+              className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2.5 dark:border-gray-800"
+              key={wallet}
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="rounded-full bg-gray-100 p-2 text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                  <WalletIcon className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 text-sm dark:text-gray-100">
+                    {formatAddress(wallet)}
+                  </div>
+                  <div className="text-gray-500 text-xs dark:text-gray-400">
+                    Linked wallet
+                  </div>
+                </div>
+              </div>
+              <CheckCircleIcon className="size-4 text-green-600 dark:text-green-400" />
+            </div>
+          ))}
+
+        {email ? (
+          <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 px-3 py-2.5 dark:border-gray-800">
+            <div className="rounded-full bg-gray-100 p-2 text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+              <EnvelopeIcon className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate font-medium text-gray-900 text-sm dark:text-gray-100">
+                {email}
+              </div>
+              <div className="text-gray-500 text-xs dark:text-gray-400">
+                Login email
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          className="w-full"
+          icon={<PlusIcon className="size-4" />}
+          onClick={() => connectWallet()}
+          outline
+          size="sm"
+        >
+          Connect wallet
+        </Button>
+        <Button
+          className="w-full"
+          icon={<LinkIcon className="size-4" />}
+          onClick={() => linkWallet()}
+          outline
+          size="sm"
+        >
+          Link another
+        </Button>
+      </div>
+
+      {primaryWallet ? null : (
+        <Button
+          className="w-full"
+          onClick={() => login({ loginMethods: ["wallet", "email"] })}
+          size="sm"
+        >
+          Finish setup
+        </Button>
+      )}
     </div>
   );
 };

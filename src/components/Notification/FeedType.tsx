@@ -19,7 +19,8 @@ const FeedType = ({ feedType, setFeedType }: FeedTypeProps) => {
   return (
     <Tabs
       active={feedType}
-      className="mx-5 mb-5 md:mx-0"
+      className="mx-3 mb-3 md:mx-0 md:mb-4"
+      itemClassName="px-3 py-1 text-[12px] md:px-3.5 md:py-1.5 md:text-sm"
       layoutId="notification_tab"
       mobileScrollable
       setActive={(type) => {

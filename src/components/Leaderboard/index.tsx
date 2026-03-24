@@ -1,4 +1,8 @@
-import { Squares2X2Icon, TrophyIcon } from "@heroicons/react/24/solid";
+import {
+  CheckBadgeIcon,
+  Squares2X2Icon,
+  TrophyIcon
+} from "@heroicons/react/24/solid";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import MetaTags from "@/components/Common/MetaTags";
@@ -107,9 +111,14 @@ const MobileLeaderboardCard = ({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-[15px] text-gray-900 dark:text-white">
-            {entry.displayName}
-          </p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate font-semibold text-[15px] text-gray-900 dark:text-white">
+              {entry.displayName}
+            </p>
+            {entry.isOfficial ? (
+              <CheckBadgeIcon className="size-4 shrink-0 text-brand-500" />
+            ) : null}
+          </div>
           <p className="truncate text-[11px] text-gray-500 dark:text-[#9f9fa5]">
             {entry.handle}
           </p>
@@ -168,9 +177,14 @@ const LeaderboardRow = ({
               width={40}
             />
             <div className="min-w-0">
-              <p className="truncate font-semibold text-[14px] text-gray-950 dark:text-gray-50">
-                {entry.displayName}
-              </p>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate font-semibold text-[14px] text-gray-950 dark:text-gray-50">
+                  {entry.displayName}
+                </p>
+                {entry.isOfficial ? (
+                  <CheckBadgeIcon className="size-4 shrink-0 text-brand-500" />
+                ) : null}
+              </div>
               <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
                 {entry.handle}
               </p>
@@ -285,6 +299,7 @@ const Leaderboard = () => {
     <>
       <MetaTags
         description="Track Zora's live weekly trader leaderboard with real score, volume, and trade totals."
+        image={data[0]?.avatar || "/evlogo.jpg"}
         title="Leaderboard"
       />
       <main className="mt-0 mb-16 min-w-0 flex-1 md:mt-5 md:mb-5">
