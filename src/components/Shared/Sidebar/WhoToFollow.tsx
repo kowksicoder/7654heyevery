@@ -1,7 +1,7 @@
 import { SparklesIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { CheckBadgeIcon } from "@heroicons/react/24/solid";
+import { CheckBadgeIcon, FireIcon } from "@heroicons/react/24/solid";
 import { useQuery } from "@tanstack/react-query";
-import { memo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import Hero from "@/components/Home/Hero";
 import Suggested from "@/components/Home/Suggested";
@@ -13,7 +13,10 @@ import { Card, ErrorMessage, H6, Image, Modal } from "@/components/Shared/UI";
 import { DEFAULT_AVATAR } from "@/data/constants";
 import { getPublicProfilePath } from "@/helpers/getAccount";
 import {
+  type FeaturedCreatorEntry,
+  type TraderLeaderboardEntry,
   fetchCreatorOfWeekEntry,
+  fetchTraderLeaderboardEntries,
   formatCompactMetric,
   formatDelta,
   formatUsdMetric,
@@ -36,40 +39,27 @@ const Title = memo(({ children }: { children: string }) => (
   </H6>
 ));
 
-const CreatorOfWeek = () => {
-  const { data: creator, isLoading } = useQuery({
-    queryFn: async () => await fetchCreatorOfWeekEntry(),
-    queryKey: [PUBLIC_CREATOR_OF_WEEK_QUERY_KEY],
-    staleTime: 5 * 60 * 1000
-  });
+const CreatorWeekSkeleton = () => (
+  <Card className="space-y-3 overflow-hidden p-0">
+    <div className="h-20 bg-gray-100 dark:bg-[#101011]" />
+    <div className="space-y-2.5 px-3.5 pt-6 pb-3.5">
+      <div className="space-y-1.5">
+        <Skeleton className="h-3 w-24 rounded-full" />
+        <Skeleton className="h-4 w-6/12 rounded-full" />
+        <Skeleton className="h-2.5 w-4/12 rounded-full" />
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {Array.from({ length: 4 }, (_, index) => `creator-week-${index}`).map(
+          (id) => (
+            <Skeleton className="h-10 rounded-xl" key={id} />
+          )
+        )}
+      </div>
+    </div>
+  </Card>
+);
 
-  if (isLoading) {
-    return (
-      <Card className="space-y-3 overflow-hidden p-0">
-        <div className="h-20 bg-gray-100 dark:bg-[#101011]" />
-        <div className="space-y-2.5 px-3.5 pt-6 pb-3.5">
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-24 rounded-full" />
-            <Skeleton className="h-4 w-6/12 rounded-full" />
-            <Skeleton className="h-2.5 w-4/12 rounded-full" />
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {Array.from(
-              { length: 4 },
-              (_, index) => `creator-week-${index}`
-            ).map((id) => (
-              <Skeleton className="h-10 rounded-xl" key={id} />
-            ))}
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  if (!creator) {
-    return null;
-  }
-
+const CreatorOfWeekCard = ({ creator }: { creator: FeaturedCreatorEntry }) => {
   const creatorPath = getPublicProfilePath({
     address: creator.address,
     handle: creator.handle
@@ -177,6 +167,206 @@ const CreatorOfWeek = () => {
   );
 };
 
+const FanOfWeekCard = ({ fan }: { fan: TraderLeaderboardEntry }) => {
+  const fanPath = getPublicProfilePath({
+    address: fan.address,
+    handle: fan.handle
+  });
+
+  const content = (
+    <Card className="group overflow-hidden p-0 transition-transform duration-200 hover:-translate-y-0.5">
+      <div className="relative h-20 overflow-hidden bg-gray-100 dark:bg-[#101011]">
+        <Image
+          alt={fan.displayName}
+          className="h-full w-full scale-110 object-cover opacity-40 transition-transform duration-300 group-hover:scale-[1.14] dark:opacity-30"
+          src={fan.avatar || DEFAULT_AVATAR}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/20 to-white dark:via-black/20 dark:to-[#060606]" />
+        <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
+          <div className="inline-flex items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.75 font-semibold text-[9px] text-gray-700 uppercase tracking-[0.12em] backdrop-blur dark:bg-black/45 dark:text-[#d9d9de]">
+            <FireIcon className="size-3" />
+            Fan of the week
+          </div>
+          <span className="rounded-full bg-orange-500/90 px-1.5 py-0.75 font-semibold text-[9px] text-white uppercase tracking-[0.1em]">
+            Top trader
+          </span>
+        </div>
+        <div className="absolute -bottom-4.5 left-3.5">
+          <Image
+            alt={fan.displayName}
+            className="size-12 rounded-2xl border-2 border-white object-cover shadow-sm ring-1 ring-gray-200 dark:border-[#060606] dark:ring-white/10"
+            src={fan.avatar || DEFAULT_AVATAR}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2.5 px-3.5 pt-5.5 pb-3.5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="truncate font-semibold text-[14px] text-gray-900 dark:text-white">
+              {fan.displayName}
+            </p>
+            {fan.isOfficial ? (
+              <CheckBadgeIcon className="size-4 shrink-0 text-brand-500" />
+            ) : null}
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-[#9e9ea5]">
+            {fan.handle}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5">
+          <div className="rounded-xl bg-gray-100 px-1.5 py-1.5 dark:bg-[#101011]">
+            <p className="truncate font-semibold text-[12px] text-gray-900 tracking-tight dark:text-white">
+              {formatUsdMetric(fan.weekVolumeUsd)}
+            </p>
+            <p className="mt-0.5 font-medium text-[9px] text-gray-500 dark:text-[#8f8f96]">
+              Earnings
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-100 px-1.5 py-1.5 dark:bg-[#101011]">
+            <p className="truncate font-semibold text-[12px] text-gray-900 tracking-tight dark:text-white">
+              {formatCompactMetric(fan.weekTradesCount)}
+            </p>
+            <p className="mt-0.5 font-medium text-[9px] text-gray-500 dark:text-[#8f8f96]">
+              Trades
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-100 px-1.5 py-1.5 dark:bg-[#101011]">
+            <p className="truncate font-semibold text-[12px] text-gray-900 tracking-tight dark:text-white">
+              {formatCompactMetric(fan.score)}
+            </p>
+            <p className="mt-0.5 font-medium text-[9px] text-gray-500 dark:text-[#8f8f96]">
+              Score
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-100 px-1.5 py-1.5 dark:bg-[#101011]">
+            <p className="truncate font-semibold text-[12px] text-gray-900 tracking-tight dark:text-white">
+              {formatCompactMetric(fan.e1xpTotal)}
+            </p>
+            <p className="mt-0.5 font-medium text-[9px] text-gray-500 dark:text-[#8f8f96]">
+              E1XP
+            </p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+
+  if (!fanPath) {
+    return content;
+  }
+
+  return (
+    <Link className="block" to={fanPath}>
+      {content}
+    </Link>
+  );
+};
+
+const CreatorWeekSlider = () => {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const { data: creator, isLoading: isCreatorLoading } = useQuery({
+    queryFn: async () => await fetchCreatorOfWeekEntry(),
+    queryKey: [PUBLIC_CREATOR_OF_WEEK_QUERY_KEY],
+    staleTime: 5 * 60 * 1000
+  });
+
+  const { data: fan, isLoading: isFanLoading } = useQuery({
+    queryFn: async () => {
+      try {
+        const entries = await fetchTraderLeaderboardEntries(1);
+        return entries[0] ?? null;
+      } catch {
+        return null;
+      }
+    },
+    queryKey: ["fan-of-week"],
+    staleTime: 5 * 60 * 1000
+  });
+
+  const slides = useMemo(
+    () =>
+      [
+        creator
+          ? {
+              content: <CreatorOfWeekCard creator={creator} />,
+              key: "creator",
+              label: "Creator"
+            }
+          : null,
+        fan
+          ? {
+              content: <FanOfWeekCard fan={fan} />,
+              key: "fan",
+              label: "Fan"
+            }
+          : null
+      ].filter(Boolean) as Array<{
+        content: JSX.Element | null;
+        key: string;
+        label: string;
+      }>,
+    [creator, fan]
+  );
+
+  useEffect(() => {
+    if (activeSlide >= slides.length) {
+      setActiveSlide(0);
+    }
+  }, [activeSlide, slides.length]);
+
+  if (isCreatorLoading && isFanLoading) {
+    return <CreatorWeekSkeleton />;
+  }
+
+  if (!slides.length) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {slides.length > 1 ? (
+        <div className="flex items-center justify-between">
+          <Title>Weekly spotlight</Title>
+          <div className="inline-flex rounded-full bg-gray-100 p-0.5 dark:bg-[#101011]">
+            {slides.map((slide, index) => {
+              const isActive = index === activeSlide;
+              return (
+                <button
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                    isActive
+                      ? "bg-white text-gray-900 shadow-sm dark:bg-[#1b1b20] dark:text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  }`}
+                  key={slide.key}
+                  onClick={() => setActiveSlide(index)}
+                  type="button"
+                >
+                  {slide.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden">
+        <div
+          className="flex transition-transform duration-300"
+          style={{ transform: `translateX(-${activeSlide * 100}%)` }}
+        >
+          {slides.map((slide) => (
+            <div className="w-full shrink-0" key={slide.key}>
+              {slide.content}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const WhoToFollow = () => {
   const { currentAccount } = useAccountStore();
   const [showMore, setShowMore] = useState(false);
@@ -195,7 +385,7 @@ const WhoToFollow = () => {
     return (
       <div className="space-y-4">
         <Hero variant="sidebar" />
-        <CreatorOfWeek />
+        <CreatorWeekSlider />
         <Card className="space-y-2.5 p-3.5">
           <Title>Who to follow</Title>
           {Array.from(
@@ -218,7 +408,7 @@ const WhoToFollow = () => {
   }
 
   if (!data?.mlAccountRecommendations.items.length) {
-    return <CreatorOfWeek />;
+    return <CreatorWeekSlider />;
   }
 
   const recommendedAccounts = data?.mlAccountRecommendations.items.filter(
@@ -229,7 +419,7 @@ const WhoToFollow = () => {
   ) as AccountFragment[];
 
   if (!recommendedAccounts?.length) {
-    return <CreatorOfWeek />;
+    return <CreatorWeekSlider />;
   }
 
   return (
