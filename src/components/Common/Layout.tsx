@@ -2,7 +2,7 @@ import { XCircleIcon } from "@heroicons/react/24/solid";
 import { usePrivy } from "@privy-io/react-auth";
 import { useIsClient } from "@uidotdev/usehooks";
 import { memo, useEffect, useMemo, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { Toaster, type ToasterProps } from "sonner";
 import NotificationIcon from "@/components/Notification/NotificationIcon";
 import FullPageLoader from "@/components/Shared/FullPageLoader";
@@ -37,7 +37,6 @@ interface BeforeInstallPromptEvent extends Event {
 
 const Layout = () => {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const { theme } = useTheme();
   const { currentAccount, setCurrentAccount } = useAccountStore();
   const {
@@ -186,7 +185,8 @@ const Layout = () => {
 
   const handleLaunchCoin = () => {
     clearSignupCelebration();
-    navigate("/create");
+    clearPendingProductTour();
+    window.location.assign("/create");
   };
 
   const handleCloseProductTour = () => {
@@ -275,7 +275,7 @@ const Layout = () => {
         onClose={handleCloseProductTour}
         onLaunchCoin={() => {
           clearPendingProductTour();
-          navigate("/create");
+          window.location.assign("/create");
         }}
         show={
           Boolean(pendingProductTourProfileId) && !signupCelebrationProfileId
