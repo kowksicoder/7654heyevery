@@ -8,8 +8,7 @@ import Custom500 from "@/components/Shared/500";
 import PageLayout from "@/components/Shared/PageLayout";
 import { EmptyState } from "@/components/Shared/UI";
 import { AccountFeedType } from "@/data/enums";
-import getAccount from "@/helpers//getAccount";
-import getAvatar from "@/helpers//getAvatar";
+import getAccount, { getProfileHandle } from "@/helpers//getAccount";
 import isAccountDeleted from "@/helpers//isAccountDeleted";
 import {
   EVERY1_PROFILE_QUERY_KEY,
@@ -20,6 +19,7 @@ import {
   getBlockedMeMessage
 } from "@/helpers/getBlockedMessage";
 import { buildAccountFromEvery1Profile } from "@/helpers/privy";
+import { getPublicProfileShareImagePath } from "@/helpers/seo";
 import { hasSupabaseConfig } from "@/helpers/supabase";
 import useEvery1AccountProfile from "@/hooks/useEvery1AccountProfile";
 import { useAccountQuery } from "@/indexer/generated";
@@ -153,10 +153,10 @@ const ViewAccount = () => {
   const hasBlockedMe = account?.operations?.hasBlockedMe;
 
   const accountInfo = getAccount(account);
-  const profileImage =
-    (typeof account.metadata?.coverPicture === "string"
-      ? account.metadata.coverPicture
-      : null) || getAvatar(account);
+  const profileShareImage = getPublicProfileShareImagePath({
+    address: account.address,
+    handle: getProfileHandle(account)
+  });
   const shareHandle = accountInfo.username.startsWith("#")
     ? accountInfo.username
     : `@${accountInfo.username}`;
@@ -208,9 +208,10 @@ const ViewAccount = () => {
   return (
     <PageLayout
       description={profileDescription}
-      image={profileImage}
+      image={profileShareImage}
       title={`${accountInfo.name} (${shareHandle}) - Every1`}
       type="profile"
+      url={accountInfo.link}
       zeroTopMargin
     >
       {renderAccountDetails()}

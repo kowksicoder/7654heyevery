@@ -19,6 +19,7 @@ import {
   formatEther,
   formatUnits,
   http,
+  isAddress,
   parseEther,
   parseUnits
 } from "viem";
@@ -35,12 +36,24 @@ import {
   Tooltip
 } from "@/components/Shared/UI";
 import { BASE_RPC_URL } from "@/data/constants";
+import cn from "@/helpers/cn";
 import {
   EVERY1_NOTIFICATION_COUNT_QUERY_KEY,
   EVERY1_NOTIFICATIONS_QUERY_KEY,
   EVERY1_REFERRAL_DASHBOARD_QUERY_KEY,
+  EVERY1_WALLET_ACTIVITY_QUERY_KEY,
   recordReferralTradeReward
 } from "@/helpers/every1";
+import {
+  executeSell,
+  executeSupport,
+  getSellQuote,
+  getSupportQuote
+} from "@/helpers/fiat";
+import {
+  createFiatIdempotencyKey,
+  normalizeFiatUiError
+} from "@/helpers/fiatUi";
 import useHandleWrongNetwork from "@/hooks/useHandleWrongNetwork";
 import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 
@@ -52,10 +65,22 @@ interface TradeModalProps {
 }
 
 type Mode = "buy" | "sell";
+type TradeRail = "fiat" | "onchain";
 type TradeStatusModalState = null | {
   description?: string;
   title: string;
   tone: "pending" | "success";
+};
+type FiatQuoteState = null | {
+  amountLabel: string;
+  expiresAt: string;
+  quoteId: string;
+  settlement?: {
+    address: Address;
+    transferAmountLabel: string;
+    transferAmountRaw: string;
+  };
+  summary: string;
 };
 
 const Trade = ({
@@ -69,6 +94,7 @@ const Trade = ({
   const queryClient = useQueryClient();
   const { profile } = useEvery1Store();
   const { data: walletClient } = useWalletClient({ chainId: base.id });
+  const { data: signingWalletClient } = useWalletClient();
   const publicClient = useMemo(
     () =>
       createPublicClient({
@@ -80,24 +106,37 @@ const Trade = ({
   const handleWrongNetwork = useHandleWrongNetwork();
 
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [tradeRail, setTradeRail] = useState<TradeRail>("fiat");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [tradeStatusModal, setTradeStatusModal] =
     useState<TradeStatusModalState>(null);
+  const [fiatQuote, setFiatQuote] = useState<FiatQuoteState>(null);
+  const [fiatQuoteError, setFiatQuoteError] = useState<null | string>(null);
+  const [fiatQuoteLoading, setFiatQuoteLoading] = useState(false);
   const [ethBalance, setEthBalance] = useState<bigint>(0n);
   const [tokenBalance, setTokenBalance] = useState<bigint>(0n);
   const [estimatedOut, setEstimatedOut] = useState<string>("");
+  const tradeWalletAddress = useMemo(() => {
+    const candidate =
+      address ||
+      walletClient?.account?.address ||
+      signingWalletClient?.account?.address ||
+      null;
+    return candidate && isAddress(candidate) ? candidate : undefined;
+  }, [address, signingWalletClient?.account?.address, walletClient]);
+  const fiatWalletClient = signingWalletClient || walletClient;
 
   useEffect(() => {
     (async () => {
-      if (!address) return;
+      if (!tradeWalletAddress) return;
       try {
         const [eth, token] = await Promise.all([
-          publicClient.getBalance({ address }),
+          publicClient.getBalance({ address: tradeWalletAddress }),
           publicClient.readContract({
             abi: erc20Abi,
             address: coin.address as Address,
-            args: [address],
+            args: [tradeWalletAddress],
             functionName: "balanceOf"
           })
         ]);
@@ -105,7 +144,7 @@ const Trade = ({
         setTokenBalance(token as bigint);
       } catch {}
     })();
-  }, [address, coin.address, publicClient]);
+  }, [coin.address, publicClient, tradeWalletAddress]);
 
   const tokenDecimals = 18;
   const isPageVariant = variant === "page";
@@ -115,8 +154,24 @@ const Trade = ({
     setMode(initialMode);
   }, [initialMode]);
 
+  useEffect(() => {
+    setFiatQuote(null);
+    setFiatQuoteError(null);
+  }, [amount, coin.address, mode, tradeRail]);
+
   const setPercentAmount = (pct: number) => {
     const decimals = 6;
+    if (tradeRail === "fiat" && mode === "buy") {
+      const suggestedValues = {
+        25: "500",
+        50: "1000",
+        75: "5000",
+        100: "10000"
+      } as const;
+      setAmount(suggestedValues[pct as 25 | 50 | 75 | 100] || "1000");
+      return;
+    }
+
     if (mode === "buy") {
       const available = Number(formatEther(ethBalance));
       const gasReserve = 0.0002;
@@ -152,12 +207,274 @@ const Trade = ({
     };
   };
 
+  const parsedAmount = Number.parseFloat(amount || "0");
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const isFiatRail = tradeRail === "fiat";
+
+  const handleFiatQuote = async () => {
+    if (!profile?.id || !fiatWalletClient?.account || !tradeWalletAddress) {
+      toast.error("Connect your wallet to continue.");
+      return;
+    }
+
+    if (!hasValidAmount) {
+      toast.error(
+        mode === "buy"
+          ? "Enter the Naira amount you want to use."
+          : `Enter the ${symbol || "coin"} amount you want to sell.`
+      );
+      return;
+    }
+
+    if (mode === "sell" && !hasEnoughTokenToSell) {
+      toast.error(`Not enough ${symbol || "token"} balance.`);
+      return;
+    }
+
+    try {
+      setFiatQuoteLoading(true);
+      setFiatQuoteError(null);
+
+      if (mode === "buy") {
+        const quote = await getSupportQuote({
+          coinAddress: coin.address as Address,
+          idempotencyKey: createFiatIdempotencyKey("support-quote"),
+          nairaAmount: parsedAmount,
+          profileId: profile.id,
+          walletAddress: tradeWalletAddress,
+          walletClient: fiatWalletClient
+        });
+
+        setFiatQuote({
+          amountLabel: `${quote.estimated_coin_amount.toLocaleString("en-US", {
+            maximumFractionDigits: 2
+          })} ${symbol || "TOKEN"}`,
+          expiresAt: quote.expires_at,
+          quoteId: quote.quote_id,
+          summary: `You'll receive approximately ${quote.estimated_coin_amount.toLocaleString(
+            "en-US",
+            { maximumFractionDigits: 2 }
+          )} ${symbol || "TOKEN"} after ${new Intl.NumberFormat("en-NG", {
+            currency: "NGN",
+            currencyDisplay: "narrowSymbol",
+            maximumFractionDigits: 0,
+            style: "currency"
+          }).format(quote.fee_naira)} in fees.`
+        });
+      } else {
+        const quote = await getSellQuote({
+          coinAddress: coin.address as Address,
+          coinAmount: parsedAmount,
+          idempotencyKey: createFiatIdempotencyKey("sell-quote"),
+          profileId: profile.id,
+          walletAddress: tradeWalletAddress,
+          walletClient: fiatWalletClient
+        });
+
+        setFiatQuote({
+          amountLabel: new Intl.NumberFormat("en-NG", {
+            currency: "NGN",
+            currencyDisplay: "narrowSymbol",
+            maximumFractionDigits: 0,
+            style: "currency"
+          }).format(quote.estimated_naira_return),
+          expiresAt: quote.expires_at,
+          quoteId: quote.quote_id,
+          settlement: {
+            address: quote.settlement.address as Address,
+            transferAmountLabel: quote.settlement.transfer_amount_label,
+            transferAmountRaw: quote.settlement.transfer_amount_raw
+          },
+          summary: `You'll receive approximately ${new Intl.NumberFormat(
+            "en-NG",
+            {
+              currency: "NGN",
+              currencyDisplay: "narrowSymbol",
+              maximumFractionDigits: 0,
+              style: "currency"
+            }
+          ).format(quote.estimated_naira_return)} after ${new Intl.NumberFormat(
+            "en-NG",
+            {
+              currency: "NGN",
+              currencyDisplay: "narrowSymbol",
+              maximumFractionDigits: 0,
+              style: "currency"
+            }
+          ).format(
+            quote.fee_naira
+          )} in fees after you confirm the secure wallet transfer.`
+        });
+      }
+    } catch (error) {
+      const message = normalizeFiatUiError(
+        error,
+        "Unable to get a Naira quote right now."
+      );
+      setFiatQuote(null);
+      setFiatQuoteError(message);
+      toast.error(message);
+    } finally {
+      setFiatQuoteLoading(false);
+    }
+  };
+
+  const handleFiatSubmit = async () => {
+    if (!profile?.id || !fiatWalletClient?.account || !tradeWalletAddress) {
+      toast.error("Connect your wallet to continue.");
+      return;
+    }
+
+    if (!fiatQuote) {
+      await handleFiatQuote();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setTradeStatusModal({
+        description:
+          mode === "buy"
+            ? "Please wait while we complete your Naira buy trade."
+            : "Confirm the wallet transfer to continue with this sell.",
+        title:
+          mode === "buy"
+            ? `Buying ${coin.name}`
+            : `Selling ${symbol || coin.name}`,
+        tone: "pending"
+      });
+
+      const response =
+        mode === "buy"
+          ? await executeSupport({
+              idempotencyKey: createFiatIdempotencyKey("support-execute"),
+              profileId: profile.id,
+              quoteId: fiatQuote.quoteId,
+              walletAddress: tradeWalletAddress,
+              walletClient: fiatWalletClient
+            })
+          : await (async () => {
+              const settlement = fiatQuote.settlement;
+
+              if (!settlement) {
+                throw new Error(
+                  "This sell quote is missing its settlement instructions."
+                );
+              }
+
+              await handleWrongNetwork({ chainId: base.id });
+              const client =
+                (await getWalletClient(config, { chainId: base.id })) ||
+                walletClient;
+
+              if (!client?.account) {
+                throw new Error("Connect a Base wallet to complete this sell.");
+              }
+
+              const transferHash = await client.writeContract({
+                abi: erc20Abi,
+                account: client.account,
+                address: coin.address as Address,
+                args: [
+                  settlement.address,
+                  BigInt(settlement.transferAmountRaw)
+                ],
+                functionName: "transfer"
+              });
+
+              await publicClient.waitForTransactionReceipt({
+                hash: transferHash,
+                timeout: 120000
+              });
+
+              setTradeStatusModal({
+                description:
+                  "Transfer confirmed. Finalizing your Naira wallet credit.",
+                title: `Settling ${symbol || coin.name}`,
+                tone: "pending"
+              });
+
+              return await executeSell({
+                idempotencyKey: createFiatIdempotencyKey("sell-execute"),
+                profileId: profile.id,
+                quoteId: fiatQuote.quoteId,
+                transactionHash: transferHash,
+                walletAddress: tradeWalletAddress,
+                walletClient: fiatWalletClient
+              });
+            })();
+
+      if (!response.success) {
+        throw new Error(response.message || "Unable to complete this request.");
+      }
+
+      if (response.status === "failed") {
+        throw new Error(
+          response.message || "This buy trade could not be completed."
+        );
+      }
+
+      setTradeStatusModal({
+        description: response.message,
+        title:
+          mode === "buy"
+            ? response.status === "completed"
+              ? "Buy completed!"
+              : "Buy finalizing"
+            : response.status === "completed"
+              ? "Sell completed!"
+              : "Sell finalizing",
+        tone: response.status === "completed" ? "success" : "pending"
+      });
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["fiat-wallet"]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["fiat-wallet-transactions"]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATIONS_QUERY_KEY, profile.id]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATION_COUNT_QUERY_KEY, profile.id]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_WALLET_ACTIVITY_QUERY_KEY, profile.id]
+        })
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+
+      setAmount("");
+      setFiatQuote(null);
+      setTradeStatusModal(null);
+      onClose?.();
+    } catch (error) {
+      const message = normalizeFiatUiError(
+        error,
+        "Unable to complete this Naira request right now."
+      );
+      setTradeStatusModal(null);
+      setFiatQuoteError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!address) {
+    if (isFiatRail) {
+      await handleFiatSubmit();
+      return;
+    }
+
+    if (!tradeWalletAddress) {
       return toast.error("Connect a wallet to trade");
     }
 
-    const params = makeParams(address);
+    const params = makeParams(tradeWalletAddress);
     if (!params) return;
 
     try {
@@ -261,7 +578,12 @@ const Trade = ({
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const run = async () => {
-      const sender = (address as Address) || undefined;
+      if (isFiatRail) {
+        setEstimatedOut("");
+        return;
+      }
+
+      const sender = tradeWalletAddress;
       if (!sender || !amount) {
         setEstimatedOut("");
         return;
@@ -308,7 +630,7 @@ const Trade = ({
       if (intervalId) clearInterval(intervalId);
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [address, amount, coin.address, mode]);
+  }, [amount, coin.address, isFiatRail, mode, tradeWalletAddress]);
 
   const symbol = coin.symbol || "";
   const formattedEthBalance = Number(formatEther(ethBalance));
@@ -316,13 +638,29 @@ const Trade = ({
     formatUnits(tokenBalance, tokenDecimals)
   );
 
-  const balanceLabel =
-    mode === "buy"
+  const balanceLabel = isFiatRail
+    ? mode === "buy"
+      ? "Uses your Every1 Naira wallet"
+      : `Balance ${formattedTokenBalance.toFixed(3)} ${symbol || "TOKEN"}`
+    : mode === "buy"
       ? `Balance ${formattedEthBalance.toFixed(4)} ETH`
       : `Balance ${formattedTokenBalance.toFixed(3)} ${symbol || "TOKEN"}`;
 
-  const quickTradeOptions =
-    mode === "buy"
+  const quickTradeOptions = isFiatRail
+    ? mode === "buy"
+      ? [
+          { label: "N500", onClick: () => setAmount("500") },
+          { label: "N1k", onClick: () => setAmount("1000") },
+          { label: "N5k", onClick: () => setAmount("5000") },
+          { label: "N10k", onClick: () => setAmount("10000") }
+        ]
+      : [
+          { label: "25%", onClick: () => setPercentAmount(25) },
+          { label: "50%", onClick: () => setPercentAmount(50) },
+          { label: "75%", onClick: () => setPercentAmount(75) },
+          { label: "Max", onClick: () => setPercentAmount(100) }
+        ]
+    : mode === "buy"
       ? [
           { label: "0.001 ETH", onClick: () => setAmount("0.001") },
           { label: "0.01 ETH", onClick: () => setAmount("0.01") },
@@ -336,12 +674,26 @@ const Trade = ({
           { label: "Max", onClick: () => setPercentAmount(100) }
         ];
 
-  const mobileQuickTradeOptions = [
-    { label: "10%", onClick: () => setPercentAmount(10) },
-    { label: "25%", onClick: () => setPercentAmount(25) },
-    { label: "50%", onClick: () => setPercentAmount(50) },
-    { label: "Max", onClick: () => setPercentAmount(100) }
-  ];
+  const mobileQuickTradeOptions = isFiatRail
+    ? mode === "buy"
+      ? [
+          { label: "N500", onClick: () => setAmount("500") },
+          { label: "N1k", onClick: () => setAmount("1000") },
+          { label: "N2.5k", onClick: () => setAmount("2500") },
+          { label: "N5k", onClick: () => setAmount("5000") }
+        ]
+      : [
+          { label: "10%", onClick: () => setPercentAmount(10) },
+          { label: "25%", onClick: () => setPercentAmount(25) },
+          { label: "50%", onClick: () => setPercentAmount(50) },
+          { label: "Max", onClick: () => setPercentAmount(100) }
+        ]
+    : [
+        { label: "10%", onClick: () => setPercentAmount(10) },
+        { label: "25%", onClick: () => setPercentAmount(25) },
+        { label: "50%", onClick: () => setPercentAmount(50) },
+        { label: "Max", onClick: () => setPercentAmount(100) }
+      ];
 
   const formatTradeNumber = (value: number, maximumFractionDigits = 4) =>
     new Intl.NumberFormat("en-US", {
@@ -349,19 +701,44 @@ const Trade = ({
       minimumFractionDigits: 0
     }).format(value);
 
+  const formatNaira = (value: number) =>
+    new Intl.NumberFormat("en-NG", {
+      currency: "NGN",
+      currencyDisplay: "narrowSymbol",
+      maximumFractionDigits: 0,
+      style: "currency"
+    }).format(Math.max(0, value));
+
   const tradeInputLabel = useMemo(() => {
     const parsedAmount = Number.parseFloat(amount || "0");
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      if (isFiatRail) {
+        return mode === "buy" ? formatNaira(0) : `0 ${symbol || "TOKEN"}`;
+      }
+
       return mode === "buy" ? "0 ETH" : `0 ${symbol || "TOKEN"}`;
+    }
+
+    if (isFiatRail) {
+      return mode === "buy"
+        ? formatNaira(parsedAmount)
+        : `${formatTradeNumber(parsedAmount, 4)} ${symbol || "TOKEN"}`;
     }
 
     return mode === "buy"
       ? `${formatTradeNumber(parsedAmount, 6)} ETH`
       : `${formatTradeNumber(parsedAmount, 4)} ${symbol || "TOKEN"}`;
-  }, [amount, mode, symbol]);
+  }, [amount, formatNaira, isFiatRail, mode, symbol]);
 
   const tradeOutputLabel = useMemo(() => {
+    if (isFiatRail) {
+      return (
+        fiatQuote?.amountLabel ||
+        (mode === "buy" ? `0 ${symbol || "TOKEN"}` : formatNaira(0))
+      );
+    }
+
     if (!estimatedOut) {
       return mode === "buy" ? `0 ${symbol || "TOKEN"}` : "0 ETH";
     }
@@ -378,7 +755,15 @@ const Trade = ({
     } catch {
       return mode === "buy" ? `0 ${symbol || "TOKEN"}` : "0 ETH";
     }
-  }, [estimatedOut, mode, symbol, tokenDecimals]);
+  }, [
+    estimatedOut,
+    fiatQuote?.amountLabel,
+    formatNaira,
+    isFiatRail,
+    mode,
+    symbol,
+    tokenDecimals
+  ]);
 
   const handleMobileKeypadInput = (key: "." | "backspace" | `${number}`) => {
     if (key === "backspace") {
@@ -406,10 +791,83 @@ const Trade = ({
     });
   };
 
+  const hasEnoughTokenToSell =
+    parsedAmount <= formattedTokenBalance + 0.0000001 || mode === "buy";
+  const modeTabs = isFiatRail
+    ? [
+        { label: "Buy", value: "buy" },
+        { label: "Sell", value: "sell" }
+      ]
+    : [
+        { label: "Buy", value: "buy" },
+        { label: "Sell", value: "sell" }
+      ];
+  const statusLabel = isFiatRail
+    ? mode === "buy"
+      ? "Buy with Naira"
+      : "Sell to Naira"
+    : mode === "buy"
+      ? "Coin trade"
+      : "Token swap";
+  const summaryText = isFiatRail
+    ? fiatQuoteError ||
+      fiatQuote?.summary ||
+      (mode === "buy"
+        ? "Enter a Naira amount, get a secure quote, then confirm your buy trade."
+        : `Enter how much ${symbol || "token"} you want to sell into Naira.`)
+    : `Estimated amount: ${
+        estimatedOut
+          ? mode === "buy"
+            ? `${Number(formatUnits(BigInt(estimatedOut), tokenDecimals)).toFixed(0)}`
+            : `${Number(formatEther(BigInt(estimatedOut))).toFixed(6)} ETH`
+          : "-"
+      }`;
+  const quoteExpiryText = fiatQuote
+    ? `Valid until ${new Date(fiatQuote.expiresAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      })}`
+    : null;
+  const submitLabel = loading
+    ? mode === "buy"
+      ? isFiatRail
+        ? "Buying with Naira"
+        : "Buying"
+      : isFiatRail
+        ? "Selling to Naira"
+        : "Selling"
+    : isFiatRail
+      ? fiatQuote
+        ? mode === "buy"
+          ? "Confirm buy"
+          : "Confirm sell"
+        : fiatQuoteLoading
+          ? "Getting quote..."
+          : "Get quote"
+      : mode === "buy"
+        ? "Buy"
+        : "Sell";
+  const canSubmit = isFiatRail
+    ? Boolean(
+        profile?.id &&
+          tradeWalletAddress &&
+          fiatWalletClient?.account &&
+          hasValidAmount &&
+          hasEnoughTokenToSell &&
+          !loading &&
+          !fiatQuoteLoading
+      )
+    : Boolean(amount && tradeWalletAddress && !loading);
+
   if (isMobileVariant) {
     const displayAmount = amount || "0";
-    const mobileBalanceLabel =
-      mode === "buy"
+    const mobileBalanceLabel = isFiatRail
+      ? mode === "buy"
+        ? "Every1 Naira wallet"
+        : `${formattedTokenBalance.toFixed(formattedTokenBalance >= 1 ? 2 : 4)} ${
+            symbol || "TOKEN"
+          } available`
+      : mode === "buy"
         ? `${formattedEthBalance.toFixed(formattedEthBalance >= 1 ? 3 : 4)} ETH available`
         : `${formattedTokenBalance.toFixed(formattedTokenBalance >= 1 ? 2 : 4)} ${
             symbol || "TOKEN"
@@ -433,8 +891,28 @@ const Trade = ({
       <>
         <div className="flex h-full flex-col bg-white text-gray-950 dark:bg-[#111111] dark:text-white">
           <div className="flex items-center justify-between px-3.5 pt-2 pb-1">
-            <div className="w-9" />
-            <p className="font-semibold text-lg capitalize">{mode}</p>
+            <div className="inline-flex rounded-full bg-gray-100 p-1 dark:bg-white/6">
+              {(
+                [
+                  { label: "Naira", value: "fiat" },
+                  { label: "Onchain", value: "onchain" }
+                ] as const
+              ).map((option) => (
+                <button
+                  className={cn(
+                    "rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors",
+                    tradeRail === option.value
+                      ? "bg-gray-950 text-white dark:bg-white dark:text-[#111111]"
+                      : "text-gray-500 dark:text-white/60"
+                  )}
+                  key={option.value}
+                  onClick={() => setTradeRail(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <button
               className="inline-flex size-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
               type="button"
@@ -462,7 +940,13 @@ const Trade = ({
                   </p>
                   <p className="truncate text-[10px] text-gray-500 dark:text-white/55">
                     {symbol || "COIN"} ·{" "}
-                    {mode === "buy" ? "Buy with ETH" : "Sell from your wallet"}
+                    {isFiatRail
+                      ? mode === "buy"
+                        ? "Support with Naira"
+                        : "Sell into Naira"
+                      : mode === "buy"
+                        ? "Buy with ETH"
+                        : "Sell from your wallet"}
                   </p>
                 </div>
               </div>
@@ -481,9 +965,31 @@ const Trade = ({
           </div>
 
           <div className="flex flex-1 flex-col px-3.5">
+            <div className="mb-2 flex items-center justify-center gap-1 rounded-full bg-gray-100 p-1 dark:bg-white/6">
+              {modeTabs.map((tab) => (
+                <button
+                  className={cn(
+                    "rounded-full px-3 py-1.5 font-semibold text-[11px] transition-colors",
+                    mode === tab.value
+                      ? "bg-gray-950 text-white dark:bg-white dark:text-[#111111]"
+                      : "text-gray-500 dark:text-white/55"
+                  )}
+                  key={tab.value}
+                  onClick={() => setMode(tab.value as Mode)}
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
             <div className="pt-2 pb-1.5 text-center">
               <p className="font-semibold text-[2.8rem] text-gray-950 leading-none tracking-tight dark:text-white">
-                {mode === "buy" ? `$${displayAmount}` : displayAmount}
+                {mode === "buy"
+                  ? isFiatRail
+                    ? `NGN ${displayAmount}`
+                    : `$${displayAmount}`
+                  : displayAmount}
               </p>
             </div>
 
@@ -500,9 +1006,13 @@ const Trade = ({
                     src={coin.mediaContent?.previewImage?.small}
                     width={14}
                   />
+                ) : isFiatRail ? (
+                  <span className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-1.5 py-0.5 font-semibold text-[9px] text-white">
+                    NGN
+                  </span>
                 ) : (
                   <span className="inline-flex items-center justify-center rounded-full bg-gray-900 px-1.5 py-0.5 font-semibold text-[9px] text-white dark:bg-white/85 dark:text-[#111111]">
-                    Ξ
+                    ETH
                   </span>
                 )}
                 <span>{mobileBalanceLabel}</span>
@@ -521,6 +1031,24 @@ const Trade = ({
                   {option.label}
                 </button>
               ))}
+            </div>
+
+            <div className="pb-2 text-center">
+              <p
+                className={cn(
+                  "text-[11px] leading-4",
+                  fiatQuoteError
+                    ? "text-rose-500 dark:text-rose-300"
+                    : "text-gray-500 dark:text-white/55"
+                )}
+              >
+                {summaryText}
+              </p>
+              {quoteExpiryText ? (
+                <p className="mt-1 text-[10px] text-gray-400 dark:text-white/35">
+                  {quoteExpiryText}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-3 gap-x-2 gap-y-2.5 pb-3">
@@ -542,30 +1070,24 @@ const Trade = ({
 
             <button
               className="mt-auto mb-4 flex h-11 w-full items-center justify-center rounded-[1rem] bg-gray-950 font-semibold text-[15px] text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 dark:bg-white/8 dark:text-white dark:disabled:bg-white/6 dark:disabled:text-white/45 dark:hover:bg-white/12"
-              disabled={!amount || !address || loading}
+              disabled={!canSubmit}
               onClick={handleSubmit}
               type="button"
             >
-              {loading ? (
+              {loading || fiatQuoteLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <Spinner size="xs" />
-                  <span>{mode === "buy" ? "Buying" : "Selling"}</span>
+                  <span>{submitLabel}</span>
                 </span>
-              ) : amount ? (
-                mode === "buy" ? (
-                  "Buy"
-                ) : (
-                  "Sell"
-                )
               ) : (
-                "Enter an amount"
+                submitLabel
               )}
             </button>
           </div>
         </div>
         <ActionStatusModal
           description={tradeStatusModal?.description}
-          label={mode === "buy" ? "Coin trade" : "Token swap"}
+          label={statusLabel}
           show={Boolean(tradeStatusModal)}
           title={tradeStatusModal?.title || ""}
           tone={tradeStatusModal?.tone || "pending"}
@@ -583,21 +1105,21 @@ const Trade = ({
               <div className="inline-flex rounded-full bg-gray-100 p-1 dark:bg-gray-900">
                 {(
                   [
-                    { label: "Buy", value: "buy" },
-                    { label: "Sell", value: "sell" }
+                    { label: "Naira", value: "fiat" },
+                    { label: "Onchain", value: "onchain" }
                   ] as const
-                ).map((tab) => (
+                ).map((option) => (
                   <button
                     className={
-                      mode === tab.value
-                        ? "rounded-full bg-emerald-500 px-2.5 py-1 font-semibold text-[10px] text-white"
+                      tradeRail === option.value
+                        ? "rounded-full bg-gray-950 px-2.5 py-1 font-semibold text-[10px] text-white dark:bg-white dark:text-[#111111]"
                         : "rounded-full px-2.5 py-1 font-semibold text-[10px] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
                     }
-                    key={tab.value}
-                    onClick={() => setMode(tab.value)}
+                    key={option.value}
+                    onClick={() => setTradeRail(option.value)}
                     type="button"
                   >
-                    {tab.label}
+                    {option.label}
                   </button>
                 ))}
               </div>
@@ -607,19 +1129,40 @@ const Trade = ({
               </p>
             </div>
 
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="inline-flex rounded-full bg-gray-100 p-1 dark:bg-gray-900">
+                {modeTabs.map((tab) => (
+                  <button
+                    className={
+                      mode === tab.value
+                        ? "rounded-full bg-emerald-500 px-2.5 py-1 font-semibold text-[10px] text-white"
+                        : "rounded-full px-2.5 py-1 font-semibold text-[10px] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                    }
+                    key={tab.value}
+                    onClick={() => setMode(tab.value as Mode)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="rounded-[0.9rem] border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-center justify-between gap-3">
                 <input
                   className="w-full bg-transparent font-semibold text-[1.45rem] text-gray-950 leading-none outline-hidden placeholder:text-gray-400 dark:text-gray-50 dark:placeholder:text-gray-500"
                   inputMode="decimal"
                   onChange={(event) => setAmount(event.target.value)}
-                  placeholder="0.000111"
+                  placeholder={
+                    isFiatRail && mode === "buy" ? "1000" : "0.000111"
+                  }
                   value={amount}
                 />
 
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2 py-1.25 font-semibold text-[11px] text-gray-950 dark:border-gray-700 dark:bg-black dark:text-gray-50">
                   {mode === "buy" ? (
-                    <span>ETH</span>
+                    <span>{isFiatRail ? "NGN" : "ETH"}</span>
                   ) : (
                     <>
                       <Image
@@ -649,36 +1192,44 @@ const Trade = ({
               ))}
             </div>
 
-            <div className="rounded-[0.85rem] border border-gray-200 bg-white px-2.5 py-1.75 dark:border-gray-800 dark:bg-black">
-              <input
-                className="w-full bg-transparent text-[11px] text-gray-700 outline-hidden placeholder:text-gray-400 dark:text-gray-200 dark:placeholder:text-gray-500"
-                placeholder="Add a comment..."
-                type="text"
-              />
+            <div className="rounded-[0.85rem] border border-gray-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-black">
+              <p
+                className={cn(
+                  "text-[11px] leading-4",
+                  fiatQuoteError
+                    ? "text-rose-500 dark:text-rose-300"
+                    : "text-gray-700 dark:text-gray-200"
+                )}
+              >
+                {summaryText}
+              </p>
+              {quoteExpiryText ? (
+                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                  {quoteExpiryText}
+                </p>
+              ) : null}
             </div>
           </div>
 
           <button
             className="mt-auto flex h-10 w-full items-center justify-center rounded-[0.85rem] bg-emerald-500 font-semibold text-[14px] text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-emerald-300 dark:disabled:bg-emerald-900"
-            disabled={!amount || !address || loading}
+            disabled={!canSubmit}
             onClick={handleSubmit}
             type="button"
           >
-            {loading ? (
+            {loading || fiatQuoteLoading ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="xs" />
-                <span>{mode === "buy" ? "Buying" : "Selling"}</span>
+                <span>{submitLabel}</span>
               </span>
-            ) : mode === "buy" ? (
-              "Buy"
             ) : (
-              "Sell"
+              submitLabel
             )}
           </button>
         </div>
         <ActionStatusModal
           description={tradeStatusModal?.description}
-          label={mode === "buy" ? "Coin trade" : "Token swap"}
+          label={statusLabel}
           show={Boolean(tradeStatusModal)}
           title={tradeStatusModal?.title || ""}
           tone={tradeStatusModal?.tone || "pending"}
@@ -690,25 +1241,53 @@ const Trade = ({
   return (
     <>
       <div className="p-5">
+        <div className="mb-3 inline-flex rounded-full bg-gray-100 p-1 dark:bg-gray-900">
+          {(
+            [
+              { label: "Naira", value: "fiat" },
+              { label: "Onchain", value: "onchain" }
+            ] as const
+          ).map((option) => (
+            <button
+              className={
+                tradeRail === option.value
+                  ? "rounded-full bg-gray-950 px-3 py-1.5 font-semibold text-[11px] text-white dark:bg-white dark:text-[#111111]"
+                  : "rounded-full px-3 py-1.5 font-semibold text-[11px] text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+              }
+              key={option.value}
+              onClick={() => setTradeRail(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <Tabs
           active={mode}
           className="mb-4"
           layoutId="trade-mode"
           setActive={(t) => setMode(t as Mode)}
-          tabs={[
-            { name: "Buy", type: "buy" },
-            { name: "Sell", type: "sell" }
-          ]}
+          tabs={modeTabs.map((tab) => ({ name: tab.label, type: tab.value }))}
         />
         <div className="relative mb-2">
           <Input
             inputMode="decimal"
-            label="Amount"
+            label={isFiatRail && mode === "buy" ? "Naira amount" : "Amount"}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder={mode === "buy" ? "0.01" : "0"}
+            placeholder={
+              isFiatRail && mode === "buy"
+                ? "1000"
+                : mode === "buy"
+                  ? "0.01"
+                  : "0"
+            }
             prefix={
               mode === "buy" ? (
-                "ETH"
+                isFiatRail ? (
+                  "NGN"
+                ) : (
+                  "ETH"
+                )
               ) : (
                 <Tooltip content={`$${symbol}`}>
                   <Image
@@ -725,41 +1304,34 @@ const Trade = ({
           />
         </div>
         <div className="mb-3 flex items-center justify-between text-gray-500 text-xs dark:text-gray-400">
-          <div>
-            Estimated amount:{" "}
-            {estimatedOut
-              ? mode === "buy"
-                ? `${Number(
-                    formatUnits(BigInt(estimatedOut), tokenDecimals)
-                  ).toFixed(0)}`
-                : `${Number(formatEther(BigInt(estimatedOut))).toFixed(6)} ETH`
-              : "-"}
-          </div>
+          <div>{summaryText}</div>
           <div>{balanceLabel}</div>
         </div>
+        {quoteExpiryText ? (
+          <div className="mb-3 text-gray-500 text-xs dark:text-gray-400">
+            {quoteExpiryText}
+          </div>
+        ) : null}
         <div className="mb-3 grid grid-cols-4 gap-2">
-          {[25, 50, 75].map((p) => (
-            <Button key={p} onClick={() => setPercentAmount(p)} outline>
-              {p}%
+          {quickTradeOptions.map((option) => (
+            <Button key={option.label} onClick={option.onClick} outline>
+              {option.label}
             </Button>
           ))}
-          <Button onClick={() => setPercentAmount(100)} outline>
-            Max
-          </Button>
         </div>
         <Button
           className="mt-4 w-full"
-          disabled={!amount || !address}
-          loading={loading}
+          disabled={!canSubmit}
+          loading={loading || fiatQuoteLoading}
           onClick={handleSubmit}
           size="lg"
         >
-          {mode === "buy" ? "Buy" : "Sell"}
+          {submitLabel}
         </Button>
       </div>
       <ActionStatusModal
         description={tradeStatusModal?.description}
-        label={mode === "buy" ? "Coin trade" : "Token swap"}
+        label={statusLabel}
         show={Boolean(tradeStatusModal)}
         title={tradeStatusModal?.title || ""}
         tone={tradeStatusModal?.tone || "pending"}

@@ -1,7 +1,7 @@
 import { SparklesIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { CheckBadgeIcon, FireIcon } from "@heroicons/react/24/solid";
 import { useQuery } from "@tanstack/react-query";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import Hero from "@/components/Home/Hero";
 import Suggested from "@/components/Home/Suggested";
@@ -14,14 +14,14 @@ import { DEFAULT_AVATAR } from "@/data/constants";
 import { getPublicProfilePath } from "@/helpers/getAccount";
 import {
   type FeaturedCreatorEntry,
-  type TraderLeaderboardEntry,
   fetchCreatorOfWeekEntry,
   fetchTraderLeaderboardEntries,
   formatCompactMetric,
   formatDelta,
   formatUsdMetric,
   getCreatorTicker,
-  isPositiveDelta
+  isPositiveDelta,
+  type TraderLeaderboardEntry
 } from "@/helpers/liveCreatorData";
 import { PUBLIC_CREATOR_OF_WEEK_QUERY_KEY } from "@/helpers/staff";
 import {
@@ -61,7 +61,7 @@ const CreatorWeekSkeleton = () => (
 
 const CreatorOfWeekCard = ({ creator }: { creator: FeaturedCreatorEntry }) => {
   const creatorPath = getPublicProfilePath({
-    address: creator.address,
+    address: creator.creatorWalletAddress || creator.address,
     handle: creator.handle
   });
   const ticker = getCreatorTicker(creator.symbol);
@@ -303,7 +303,7 @@ const CreatorWeekSlider = () => {
             }
           : null
       ].filter(Boolean) as Array<{
-        content: JSX.Element | null;
+        content: ReactNode;
         key: string;
         label: string;
       }>,
@@ -334,7 +334,7 @@ const CreatorWeekSlider = () => {
               const isActive = index === activeSlide;
               return (
                 <button
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                  className={`rounded-full px-2.5 py-1 font-semibold text-[10px] transition ${
                     isActive
                       ? "bg-white text-gray-900 shadow-sm dark:bg-[#1b1b20] dark:text-white"
                       : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -426,7 +426,7 @@ const WhoToFollow = () => {
     <>
       <div className="space-y-4">
         <Hero variant="sidebar" />
-        <CreatorOfWeek />
+        <CreatorWeekSlider />
         <Card className="space-y-2.5 p-3.5">
           <Title>Who to follow</Title>
           <ErrorMessage error={error} title="Failed to load recommendations" />

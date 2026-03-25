@@ -80,7 +80,7 @@ const ShortcutTabs = memo(() => {
 
 const CreatorRow = ({ creator }: { creator: FeaturedCreatorEntry }) => {
   const creatorPath = getPublicProfilePath({
-    address: creator.address,
+    address: creator.creatorWalletAddress || creator.address,
     handle: creator.handle
   });
   const positive = isPositiveDelta(creator.marketCapDelta24h);

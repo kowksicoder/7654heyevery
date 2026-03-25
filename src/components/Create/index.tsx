@@ -28,6 +28,11 @@ import {
   createCollaborationCoinInvite,
   getPublicEvery1Profile
 } from "@/helpers/every1";
+import {
+  COLLABORATION_LAUNCH_CATEGORY,
+  COMMUNITY_LAUNCH_CATEGORY,
+  CREATOR_CREATE_CATEGORY_OPTIONS
+} from "@/helpers/platformCategories";
 import { getSupabaseClient, hasSupabaseConfig } from "@/helpers/supabase";
 import useHandleWrongNetwork from "@/hooks/useHandleWrongNetwork";
 import useOpenAuth from "@/hooks/useOpenAuth";
@@ -80,6 +85,7 @@ const Create = () => {
   const [activeTab, setActiveTab] = useState<CreateTab>(initialTab);
   const [ticker, setTicker] = useState("");
   const [name, setName] = useState("");
+  const [creatorCategory, setCreatorCategory] = useState("");
   const [description, setDescription] = useState("");
   const [collaboratorHandle, setCollaboratorHandle] = useState("");
   const [inviteNote, setInviteNote] = useState("");
@@ -103,6 +109,11 @@ const Create = () => {
 
   const isCommunity = activeTab === "community";
   const isCollaboration = activeTab === "collaboration";
+  const selectedCategory = isCommunity
+    ? COMMUNITY_LAUNCH_CATEGORY
+    : isCollaboration
+      ? COLLABORATION_LAUNCH_CATEGORY
+      : creatorCategory;
   const hasTicker = Boolean(ticker.trim());
   const creatorSplitValue = Number.parseFloat(creatorSplit || "0");
   const collaboratorSplitValue = Math.max(
@@ -117,6 +128,7 @@ const Create = () => {
     collaboratorSplitValue > 0;
   const canSubmit = Boolean(
     selectedFile &&
+      selectedCategory &&
       ticker.trim() &&
       name.trim() &&
       (!isCollaboration || (collaboratorHandle.trim() && isSplitValid))
@@ -256,6 +268,7 @@ const Create = () => {
 
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc("create_creator_coin_launch", {
+      input_category: selectedCategory,
       input_chain_id: base.id,
       input_coin_address: coinAddress,
       input_cover_image_url: coverImageUrl,
@@ -293,6 +306,7 @@ const Create = () => {
     const slug = slugifyValue(name.trim()) || slugifyValue(ticker.trim());
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc("create_community_coin_launch", {
+      input_category: selectedCategory,
       input_chain_id: base.id,
       input_coin_address: coinAddress,
       input_coin_description: description.trim() || null,
@@ -349,6 +363,7 @@ const Create = () => {
     }
 
     return await createCollaborationCoinInvite(profile.id, {
+      category: selectedCategory,
       collaboratorProfileId: collaboratorProfile.id,
       collaboratorUsername: normalizedCollaboratorHandle,
       coverImageUrl,
@@ -650,6 +665,47 @@ const Create = () => {
               desktop ? "mb-1 text-sm" : "mb-0.5 text-[10px]"
             )}
           >
+            Category
+          </span>
+          <select
+            className={cn(
+              "w-full appearance-none border-none bg-gray-100 font-semibold text-gray-950 outline-none focus:ring-0 dark:bg-[#1b1c20] dark:text-white",
+              desktop
+                ? "rounded-[16px] px-4 py-2.5 text-base"
+                : "rounded-[14px] px-2.5 py-2 text-sm"
+            )}
+            disabled={isCommunity || isCollaboration}
+            onChange={(event) => setCreatorCategory(event.target.value)}
+            value={selectedCategory}
+          >
+            {isCommunity || isCollaboration ? null : (
+              <option value="">Select category</option>
+            )}
+            {isCommunity ? (
+              <option value={COMMUNITY_LAUNCH_CATEGORY}>
+                {COMMUNITY_LAUNCH_CATEGORY}
+              </option>
+            ) : isCollaboration ? (
+              <option value={COLLABORATION_LAUNCH_CATEGORY}>
+                {COLLABORATION_LAUNCH_CATEGORY}
+              </option>
+            ) : (
+              CREATOR_CREATE_CATEGORY_OPTIONS.map((categoryOption) => (
+                <option key={categoryOption} value={categoryOption}>
+                  {categoryOption}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        <label className="block">
+          <span
+            className={cn(
+              "block text-gray-500 dark:text-white/58",
+              desktop ? "mb-1 text-sm" : "mb-0.5 text-[10px]"
+            )}
+          >
             Description
           </span>
           <textarea
@@ -916,6 +972,17 @@ const Create = () => {
             {isCollaboration
               ? `${formatSplitPercent(collaboratorSplitValue)}%`
               : topCopy.postDestination}
+          </span>
+        </div>
+        <div
+          className={cn(
+            "flex items-center justify-between",
+            desktop ? "py-1 text-base" : "py-0.5 text-xs"
+          )}
+        >
+          <span className="text-gray-600 dark:text-white/72">Category</span>
+          <span className="text-right text-gray-900 dark:text-white/88">
+            {selectedCategory || "Select category"}
           </span>
         </div>
         {isCollaboration ? (

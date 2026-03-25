@@ -34,6 +34,7 @@ import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 import Unwrap from "./Unwrap";
 import Withdraw from "./Withdraw";
+import FiatWalletPanel from "./FiatWalletPanel";
 import Wrap from "./Wrap";
 
 type FundsTab = "activity" | "coins" | "collectibles";
@@ -568,6 +569,8 @@ const Balances = () => {
 
   return (
     <>
+      <FiatWalletPanel />
+
       <section className="overflow-hidden border border-gray-200/65 bg-white text-gray-900 md:rounded-[2rem] dark:border-gray-800/75 dark:bg-black dark:text-white">
         <div className="mx-auto max-w-[42rem] px-3 py-2.5 sm:px-5 md:px-6 md:py-5">
           <div>

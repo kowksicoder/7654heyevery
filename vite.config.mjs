@@ -6,6 +6,8 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { createCollaborationRuntime } from "./script/collaborationRuntime.mjs";
 import { createFanDropRuntime } from "./script/fandropRuntime.mjs";
+import { createFiatRuntime } from "./script/fiatRuntime.mjs";
+import { createProfileShareRuntime } from "./script/profileShareRuntime.mjs";
 import { createPushRuntime } from "./script/pushRuntime.mjs";
 import { createVerificationRuntime } from "./script/verificationRuntime.mjs";
 
@@ -13,6 +15,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const collaborationRuntime = createCollaborationRuntime({ rootDir: __dirname });
 const fanDropRuntime = createFanDropRuntime({ rootDir: __dirname });
+const fiatRuntime = createFiatRuntime({ rootDir: __dirname });
+const profileShareRuntime = createProfileShareRuntime({ rootDir: __dirname });
 const pushRuntime = createPushRuntime({ rootDir: __dirname });
 const verificationRuntime = createVerificationRuntime({ rootDir: __dirname });
 
@@ -79,6 +83,7 @@ export default defineConfig({
       configureServer(server) {
         collaborationRuntime.start();
         fanDropRuntime.start();
+        fiatRuntime.start();
         pushRuntime.start();
         verificationRuntime.start();
         server.middlewares.use(async (request, response, next) => {
@@ -95,6 +100,24 @@ export default defineConfig({
           );
 
           if (fanDropHandled) {
+            return;
+          }
+
+          const fiatHandled = await fiatRuntime.handleApiRequest(
+            request,
+            response
+          );
+
+          if (fiatHandled) {
+            return;
+          }
+
+          const profileShareHandled = await profileShareRuntime.handleRequest(
+            request,
+            response
+          );
+
+          if (profileShareHandled) {
             return;
           }
 

@@ -3,6 +3,7 @@ import {
   type GetProfileCoinsResponse,
   type GetProfileResponse,
   type GetTraderLeaderboardResponse,
+  getCoin,
   getFeaturedCreators,
   getMostValuableCreatorCoins,
   getProfile,
@@ -19,6 +20,7 @@ import {
 import formatAddress from "@/helpers/formatAddress";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
 import nFormatter from "@/helpers/nFormatter";
+import { listPublicPlatformLaunches } from "@/helpers/platformDiscovery";
 import {
   getPublicCreatorOfWeekCampaign,
   getPublicCreatorOverrides
@@ -57,10 +59,13 @@ export interface FeaturedCreatorEntry {
   bannerUrl?: null | string;
   category?: null | string;
   createdAt: string | undefined;
+  creatorProfileId?: string;
+  creatorWalletAddress?: string;
   creatorEarningsUsd?: number;
   handle: string;
   featuredPriceUsd?: number;
   isOfficial?: boolean;
+  isPlatformCreated?: boolean;
   marketCap: string;
   marketCapDelta24h: string;
   name: string;
@@ -97,12 +102,17 @@ const withOfficialCreatorFlags = async (
 ): Promise<FeaturedCreatorEntry[]> => {
   const profilesByWallet = hasSupabaseConfig()
     ? await getPublicEvery1ProfilesByWallets(
-        entries.map((entry) => entry.address).filter(Boolean)
+        entries
+          .map((entry) => entry.creatorWalletAddress || entry.address)
+          .filter(Boolean)
       ).catch(() => ({}) as Record<string, never>)
     : {};
 
   return entries.map((entry) => {
-    const officialProfile = profilesByWallet[entry.address.toLowerCase()];
+    const officialLookupAddress = (
+      entry.creatorWalletAddress || entry.address
+    ).toLowerCase();
+    const officialProfile = profilesByWallet[officialLookupAddress];
 
     return {
       ...entry,
@@ -129,6 +139,201 @@ const findCreatorCoin = (
     coins.find((coin) => coin.address.toLowerCase() === creatorCoinAddress) ||
     coins[0]
   );
+};
+
+type CreatorOverrideEntry = Awaited<
+  ReturnType<typeof getPublicCreatorOverrides>
+>[number];
+
+const normalizeCreatorHandle = (handle?: null | string) => {
+  const trimmed = handle?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+};
+
+const getCreatorEntryKey = (entry: FeaturedCreatorEntry) =>
+  (
+    entry.creatorWalletAddress ||
+    entry.handle.replace(/^@/, "").trim() ||
+    entry.address
+  ).toLowerCase();
+
+const buildOrderedCreatorEntries = (
+  entries: FeaturedCreatorEntry[],
+  manualFeaturedIdentifiers: string[]
+) => {
+  const orderedKeys = new Set<string>();
+  const orderedEntries: FeaturedCreatorEntry[] = [];
+
+  for (const identifier of manualFeaturedIdentifiers) {
+    const normalizedIdentifier = identifier.replace(/^@/, "").toLowerCase();
+    const match = entries.find((entry) => {
+      const normalizedHandle = entry.handle.replace(/^@/, "").toLowerCase();
+      const normalizedWallet = entry.creatorWalletAddress?.toLowerCase();
+
+      return (
+        normalizedHandle === normalizedIdentifier ||
+        normalizedWallet === identifier.toLowerCase() ||
+        entry.address.toLowerCase() === identifier.toLowerCase()
+      );
+    });
+
+    if (!match) {
+      continue;
+    }
+
+    const matchKey = getCreatorEntryKey(match);
+
+    if (!orderedKeys.has(matchKey)) {
+      orderedKeys.add(matchKey);
+      orderedEntries.push(match);
+    }
+  }
+
+  for (const entry of entries) {
+    const entryKey = getCreatorEntryKey(entry);
+
+    if (!orderedKeys.has(entryKey)) {
+      orderedKeys.add(entryKey);
+      orderedEntries.push(entry);
+    }
+  }
+
+  return orderedEntries;
+};
+
+const buildPlatformFeaturedCreatorEntry = async (
+  launch: Awaited<ReturnType<typeof listPublicPlatformLaunches>>[number]
+): Promise<FeaturedCreatorEntry> => {
+  const fallbackHandle =
+    normalizeCreatorHandle(launch.creator.username) ||
+    (launch.creator.walletAddress
+      ? formatAddress(launch.creator.walletAddress)
+      : formatAddress(launch.coinAddress));
+  const fallbackName =
+    launch.creator.displayName ||
+    launch.creator.username ||
+    launch.name ||
+    formatAddress(launch.coinAddress);
+  const fallbackEntry = {
+    address: launch.coinAddress,
+    avatar: launch.creator.avatarUrl || launch.coverImageUrl || DEFAULT_AVATAR,
+    createdAt: launch.launchedAt,
+    creatorProfileId: launch.creator.id,
+    creatorWalletAddress: launch.creator.walletAddress || undefined,
+    handle: fallbackHandle,
+    isOfficial: launch.creator.isOfficial,
+    isPlatformCreated: true,
+    marketCap: "0",
+    marketCapDelta24h: "0",
+    name: fallbackName,
+    symbol: launch.ticker.toUpperCase(),
+    uniqueHolders: 0,
+    volume24h: "0"
+  } satisfies FeaturedCreatorEntry;
+
+  if (!zoraApiKey) {
+    return fallbackEntry;
+  }
+
+  try {
+    const response = await getCoin({
+      address: launch.coinAddress as `0x${string}`,
+      chain: 8453
+    });
+    const coin = response.data?.zora20Token;
+
+    if (!coin || coin.platformBlocked || coin.creatorProfile?.platformBlocked) {
+      return fallbackEntry;
+    }
+
+    return {
+      ...fallbackEntry,
+      avatar:
+        coin.creatorProfile?.avatar?.previewImage?.medium ||
+        coin.creatorProfile?.avatar?.previewImage?.small ||
+        coin.mediaContent?.previewImage?.medium ||
+        coin.mediaContent?.previewImage?.small ||
+        fallbackEntry.avatar,
+      createdAt: coin.createdAt || fallbackEntry.createdAt,
+      handle:
+        normalizeCreatorHandle(coin.creatorProfile?.handle) ||
+        fallbackEntry.handle,
+      marketCap: coin.marketCap || fallbackEntry.marketCap,
+      marketCapDelta24h: coin.marketCapDelta24h || "0",
+      name:
+        launch.creator.displayName ||
+        launch.creator.username ||
+        coin.creatorProfile?.handle ||
+        coin.name ||
+        fallbackEntry.name,
+      symbol: coin.symbol || fallbackEntry.symbol,
+      uniqueHolders: coin.uniqueHolders || 0,
+      volume24h: coin.volume24h || "0"
+    } satisfies FeaturedCreatorEntry;
+  } catch {
+    return fallbackEntry;
+  }
+};
+
+const fetchPlatformFeaturedCreatorEntries = async (
+  count: number,
+  creatorOverrides: CreatorOverrideEntry[]
+) => {
+  const hiddenProfileIds = new Set(
+    creatorOverrides
+      .filter((override) => override.isHidden)
+      .map((override) => override.profileId)
+  );
+  const hiddenWallets = new Set(
+    creatorOverrides
+      .filter((override) => override.isHidden && override.walletAddress)
+      .map((override) => override.walletAddress?.toLowerCase())
+  );
+  const hiddenHandles = new Set(
+    creatorOverrides
+      .filter((override) => override.isHidden && override.zoraHandle)
+      .map((override) => override.zoraHandle?.toLowerCase())
+  );
+  const launches = await listPublicPlatformLaunches({
+    limit: Math.max(count * 4, 24)
+  }).catch(() => []);
+  const seenCreators = new Set<string>();
+  const uniqueLaunches = launches.filter((launch) => {
+    const creatorWallet = launch.creator.walletAddress?.toLowerCase();
+    const creatorHandle = launch.creator.username?.toLowerCase();
+
+    if (
+      hiddenProfileIds.has(launch.creator.id) ||
+      (creatorWallet && hiddenWallets.has(creatorWallet)) ||
+      (creatorHandle && hiddenHandles.has(creatorHandle))
+    ) {
+      return false;
+    }
+
+    const creatorKey =
+      creatorWallet ||
+      creatorHandle ||
+      launch.creator.id.toLowerCase() ||
+      launch.coinAddress.toLowerCase();
+
+    if (seenCreators.has(creatorKey)) {
+      return false;
+    }
+
+    seenCreators.add(creatorKey);
+    return true;
+  });
+
+  const entries = await Promise.all(
+    uniqueLaunches.map((launch) => buildPlatformFeaturedCreatorEntry(launch))
+  );
+
+  return entries.slice(0, Math.max(count, 1));
 };
 
 const buildFeaturedCreatorEntry = async (
@@ -164,9 +369,12 @@ const buildFeaturedCreatorEntry = async (
         creatorCoin.mediaContent?.previewImage?.small ||
         DEFAULT_AVATAR,
       createdAt: creatorCoin.createdAt,
+      creatorProfileId: profile.id,
+      creatorWalletAddress: profile.publicWallet.walletAddress,
       handle: profile.handle.startsWith("@")
         ? profile.handle
         : `@${profile.handle}`,
+      isPlatformCreated: false,
       marketCap: creatorCoin.marketCap,
       marketCapDelta24h:
         creatorCoin.marketCapDelta24h ||
@@ -188,24 +396,6 @@ const buildFeaturedCreatorEntry = async (
 export const fetchFeaturedCreatorEntries = async (
   count = 12
 ): Promise<FeaturedCreatorEntry[]> => {
-  if (!zoraApiKey) {
-    throw new Error("Missing Zora API key for featured creators.");
-  }
-
-  const featuredResponse = await getFeaturedCreators({ first: count });
-  const featuredNodes =
-    featuredResponse.data?.traderLeaderboardFeaturedCreators?.edges?.map(
-      (edge) => edge.node
-    ) ?? [];
-
-  const uniqueHandles = Array.from(
-    new Set(
-      featuredNodes
-        .map((node: FeaturedCreatorNode) => node.handle?.trim())
-        .filter(Boolean)
-    )
-  );
-
   const creatorOverrides = hasSupabaseConfig()
     ? await getPublicCreatorOverrides().catch(() => [])
     : [];
@@ -229,46 +419,47 @@ export const fetchFeaturedCreatorEntries = async (
   const manualFeaturedIdentifiers = featuredOverrides
     .map((override) => override.zoraHandle || override.walletAddress)
     .filter((value): value is string => Boolean(value));
-  const identifiers = Array.from(
-    new Set([...manualFeaturedIdentifiers, ...uniqueHandles])
+  const platformEntries = await fetchPlatformFeaturedCreatorEntries(
+    count,
+    creatorOverrides
   );
+  let zoraEntries: FeaturedCreatorEntry[] = [];
 
-  const entries = await Promise.all(
-    identifiers.map((identifier) => buildFeaturedCreatorEntry(identifier))
-  );
+  if (zoraApiKey) {
+    const featuredResponse = await getFeaturedCreators({ first: count });
+    const featuredNodes =
+      featuredResponse.data?.traderLeaderboardFeaturedCreators?.edges?.map(
+        (edge) => edge.node
+      ) ?? [];
 
-  const filteredEntries = entries.filter(
-    (entry): entry is FeaturedCreatorEntry =>
-      entry !== null &&
-      !hiddenWallets.has(entry.address.toLowerCase()) &&
-      !hiddenHandles.has(entry.handle.replace(/^@/, "").toLowerCase())
-  );
-
-  const orderedAddresses = new Set<string>();
-  const orderedEntries: FeaturedCreatorEntry[] = [];
-
-  for (const identifier of manualFeaturedIdentifiers) {
-    const match = filteredEntries.find(
-      (entry) =>
-        entry.handle.replace(/^@/, "").toLowerCase() ===
-          identifier.replace(/^@/, "").toLowerCase() ||
-        entry.address.toLowerCase() === identifier.toLowerCase()
+    const uniqueHandles = Array.from(
+      new Set(
+        featuredNodes
+          .map((node: FeaturedCreatorNode) => node.handle?.trim())
+          .filter(Boolean)
+      )
+    );
+    const identifiers = Array.from(
+      new Set([...manualFeaturedIdentifiers, ...uniqueHandles])
+    );
+    const entries = await Promise.all(
+      identifiers.map((identifier) => buildFeaturedCreatorEntry(identifier))
     );
 
-    if (match && !orderedAddresses.has(match.address.toLowerCase())) {
-      orderedAddresses.add(match.address.toLowerCase());
-      orderedEntries.push(match);
-    }
+    zoraEntries = entries.filter(
+      (entry): entry is FeaturedCreatorEntry =>
+        entry !== null &&
+        !hiddenWallets.has((entry.creatorWalletAddress || "").toLowerCase()) &&
+        !hiddenHandles.has(entry.handle.replace(/^@/, "").toLowerCase())
+    );
   }
 
-  for (const entry of filteredEntries) {
-    if (!orderedAddresses.has(entry.address.toLowerCase())) {
-      orderedAddresses.add(entry.address.toLowerCase());
-      orderedEntries.push(entry);
-    }
-  }
+  const mergedEntries = buildOrderedCreatorEntries(
+    [...platformEntries, ...zoraEntries],
+    manualFeaturedIdentifiers
+  );
 
-  return withOfficialCreatorFlags(orderedEntries.slice(0, count));
+  return withOfficialCreatorFlags(mergedEntries.slice(0, count));
 };
 
 export const fetchCreatorOfWeekEntry =
@@ -350,6 +541,7 @@ export const fetchCreatorOfWeekEntry =
           item.mediaContent?.previewImage?.small ||
           DEFAULT_AVATAR,
         createdAt: item.createdAt,
+        creatorWalletAddress: item.creatorAddress || undefined,
         handle: handle
           ? handle.startsWith("@")
             ? handle

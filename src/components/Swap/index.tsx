@@ -6,24 +6,55 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon
 } from "@heroicons/react/24/solid";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createTradeCall,
   type ExploreResponse,
   type GetProfileBalancesResponse,
   getExploreTopVolumeAll24h,
   getProfileBalances,
-  setApiKey
+  setApiKey,
+  type TradeParameters,
+  tradeCoin
 } from "@zoralabs/coins-sdk";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import type { Address } from "viem";
+import {
+  createPublicClient,
+  erc20Abi,
+  formatEther,
+  formatUnits,
+  http,
+  parseEther,
+  parseUnits
+} from "viem";
+import { base } from "viem/chains";
+import { useAccount, useConfig, useWalletClient } from "wagmi";
+import { getWalletClient } from "wagmi/actions";
 import PageLayout from "@/components/Shared/PageLayout";
-import { Button, Card } from "@/components/Shared/UI";
-import { DEFAULT_AVATAR } from "@/data/constants";
+import { ActionStatusModal, Button, Card } from "@/components/Shared/UI";
+import { BASE_RPC_URL, DEFAULT_AVATAR } from "@/data/constants";
 import cn from "@/helpers/cn";
 import formatRelativeOrAbsolute from "@/helpers/datetime/formatRelativeOrAbsolute";
 import {
+  EVERY1_NOTIFICATION_COUNT_QUERY_KEY,
+  EVERY1_NOTIFICATIONS_QUERY_KEY,
+  EVERY1_REFERRAL_DASHBOARD_QUERY_KEY,
   EVERY1_WALLET_ACTIVITY_QUERY_KEY,
-  listProfileWalletActivity
+  listProfileWalletActivity,
+  recordReferralTradeReward
 } from "@/helpers/every1";
+import {
+  executeSell,
+  executeSupport,
+  getSellQuote,
+  getSupportQuote
+} from "@/helpers/fiat";
+import {
+  createFiatIdempotencyKey,
+  normalizeFiatUiError
+} from "@/helpers/fiatUi";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
 import {
   formatCompactMetric,
@@ -31,8 +62,14 @@ import {
   isPositiveDelta,
   parseMetricNumber
 } from "@/helpers/liveCreatorData";
+import {
+  fetchPlatformDiscoverCoins,
+  mergePriorityItemsByAddress
+} from "@/helpers/platformDiscovery";
+import useHandleWrongNetwork from "@/hooks/useHandleWrongNetwork";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { useEvery1Store } from "@/store/persisted/useEvery1Store";
+import type { SellExecuteResponse } from "@/types/fiat";
 
 const zoraApiKey = getZoraApiKey();
 
@@ -41,6 +78,7 @@ if (zoraApiKey) {
 }
 
 const USD_TO_NGN_RATE = 1500;
+const TOKEN_DECIMALS = 18;
 
 type ExploreCoinNode = NonNullable<
   NonNullable<
@@ -96,6 +134,28 @@ type Coin = {
   volume: number;
 };
 
+type RecentSwapEntry = {
+  amount: string;
+  id: string;
+  isPositive: boolean;
+  label: string;
+  meta: string;
+};
+
+type TradeRail = "fiat" | "onchain";
+type FiatQuoteState = null | {
+  amountLabel: string;
+  displayValue: string;
+  expiresAt: string;
+  quoteId: string;
+  settlement?: {
+    address: Address;
+    transferAmountLabel: string;
+    transferAmountRaw: string;
+  };
+  summary: string;
+};
+
 const EMPTY_COIN: Coin = {
   address: "",
   avatarUrl: DEFAULT_AVATAR,
@@ -139,6 +199,9 @@ const toNgn = (value: number) => {
 
   return value * USD_TO_NGN_RATE;
 };
+
+const isAddress = (value?: null | string): value is Address =>
+  Boolean(value && /^0x[a-fA-F0-9]{40}$/.test(value));
 
 const buildSwapCoin = (coin: ZoraCoinSummary, balanceToken = 0): Coin => {
   const priceUsd = parseMetricNumber(coin.tokenPrice?.priceInUsdc);
@@ -254,13 +317,22 @@ const formatSwapAmount = (value: number, maxFractionDigits = 6) =>
     minimumFractionDigits: 0
   }).format(Math.max(0, value));
 
+const formatEthAmount = (value: number, maxFractionDigits = 6) =>
+  `${formatSwapAmount(value, maxFractionDigits)} ETH`;
+
 const Swap = () => {
+  const { address } = useAccount();
+  const config = useConfig();
+  const queryClient = useQueryClient();
   const { currentAccount } = useAccountStore();
   const { profile } = useEvery1Store();
-  const [fromFiat, setFromFiat] = useState("1000");
-  const [toToken, setToToken] = useState("11.76");
-  const [direction, setDirection] = useState<"fiatToToken" | "tokenToFiat">(
-    "fiatToToken"
+  const { data: walletClient } = useWalletClient({ chainId: base.id });
+  const { data: signingWalletClient } = useWalletClient();
+  const handleWrongNetwork = useHandleWrongNetwork();
+  const [amount, setAmount] = useState("0.01");
+  const [tradeRail, setTradeRail] = useState<TradeRail>("fiat");
+  const [direction, setDirection] = useState<"ethToToken" | "tokenToEth">(
+    "ethToToken"
   );
   const [phase, setPhase] = useState(0);
   const [selectedCoin, setSelectedCoin] = useState<null | Coin>(null);
@@ -268,6 +340,20 @@ const Swap = () => {
   const [marketSectionTab, setMarketSectionTab] = useState<
     "tokens" | "history" | "holdings"
   >("tokens");
+  const [loading, setLoading] = useState(false);
+  const [estimatedOut, setEstimatedOut] = useState("");
+  const [fiatQuote, setFiatQuote] = useState<FiatQuoteState>(null);
+  const [fiatQuoteError, setFiatQuoteError] = useState<null | string>(null);
+  const [fiatQuoteLoading, setFiatQuoteLoading] = useState(false);
+  const [ethBalance, setEthBalance] = useState<bigint>(0n);
+  const [tokenBalance, setTokenBalance] = useState<bigint>(0n);
+  const [recentSwaps, setRecentSwaps] = useState<RecentSwapEntry[]>([]);
+  const [statusModal, setStatusModal] = useState<null | {
+    description?: string;
+    title: string;
+    tone: "pending" | "success";
+  }>(null);
+  const [balanceRefreshIndex, setBalanceRefreshIndex] = useState(0);
   const [hover, setHover] = useState<null | {
     value: number;
     x: number;
@@ -275,10 +361,26 @@ const Swap = () => {
   }>(null);
   const [isCoinPickerOpen, setIsCoinPickerOpen] = useState(false);
   const walletAddress =
+    address ||
+    walletClient?.account?.address ||
     currentAccount?.owner ||
     currentAccount?.address ||
     profile?.walletAddress ||
     null;
+  const tradeAddress = isAddress(walletAddress) ? walletAddress : undefined;
+  const connectedTradeAddress =
+    walletClient?.account?.address && isAddress(walletClient.account.address)
+      ? walletClient.account.address
+      : tradeAddress;
+  const fiatWalletClient = signingWalletClient || walletClient;
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain: base,
+        transport: http(BASE_RPC_URL, { batch: { batchSize: 30 } })
+      }),
+    []
+  );
 
   useEffect(() => {
     let frame = 0;
@@ -306,6 +408,11 @@ const Swap = () => {
       );
     },
     queryKey: ["swap-trending-coins"]
+  });
+  const platformPriorityQuery = useQuery({
+    queryFn: async () => await fetchPlatformDiscoverCoins({ limit: 12 }),
+    queryKey: ["swap-platform-priority-coins"],
+    staleTime: 30_000
   });
 
   const holdingsQuery = useQuery({
@@ -353,13 +460,22 @@ const Swap = () => {
   }, [holdingCoins]);
 
   const trendingCoins = useMemo(() => {
-    const nodes = (trendingQuery.data || []) as ExploreCoinNode[];
+    const nodes = mergePriorityItemsByAddress(
+      (platformPriorityQuery.data || []) as ExploreCoinNode[],
+      (trendingQuery.data || []) as ExploreCoinNode[],
+      18
+    );
 
     return nodes.map((coin) => {
       const holding = holdingByAddress.get(coin.address.toLowerCase());
       return buildSwapCoin(coin as ZoraCoinSummary, holding?.balanceToken ?? 0);
     });
-  }, [buildSwapCoin, holdingByAddress, trendingQuery.data]);
+  }, [
+    buildSwapCoin,
+    holdingByAddress,
+    platformPriorityQuery.data,
+    trendingQuery.data
+  ]);
 
   const coins = useMemo(() => {
     const map = new Map<string, Coin>();
@@ -394,39 +510,173 @@ const Swap = () => {
     setSelectedCoin(coins[0]);
   }, [coins, selectedCoin]);
 
+  useEffect(() => {
+    if (!selectedCoin) {
+      return;
+    }
+
+    const refreshedCoin = coins.find(
+      (coin) =>
+        coin.address.toLowerCase() === selectedCoin.address.toLowerCase()
+    );
+
+    if (refreshedCoin) {
+      setSelectedCoin(refreshedCoin);
+    }
+  }, [coins, selectedCoin]);
+
+  useEffect(() => {
+    setFiatQuote(null);
+    setFiatQuoteError(null);
+  }, [amount, direction, selectedCoin?.address, tradeRail]);
+
   const activeCoin = selectedCoin ?? coins[0] ?? EMPTY_COIN;
-  const parsedFiat = Number(fromFiat);
-  const fromIsFiat = direction === "fiatToToken";
+  const fromIsEth = direction === "ethToToken";
   const trendUp = activeCoin.percentChange >= 0;
   const trendColor = trendUp ? "#16a34a" : "#db2777";
   const gradientId = `swap-chart-${activeCoin.symbol || "coin"}`;
 
-  const computed = useMemo(() => {
-    if (!Number.isFinite(parsedFiat) || parsedFiat < 0) {
-      return { fiat: "0", token: "0.00" };
-    }
+  useEffect(() => {
+    let cancelled = false;
 
-    if (direction === "fiatToToken") {
-      const tokenCalc =
-        activeCoin.priceNgn > 0 ? parsedFiat / activeCoin.priceNgn : 0;
-      return {
-        fiat: parsedFiat.toLocaleString("en-NG"),
-        token: tokenCalc.toFixed(2)
-      };
-    }
+    const readBalances = async () => {
+      if (!connectedTradeAddress || !activeCoin.address) {
+        if (!cancelled) {
+          setEthBalance(0n);
+          setTokenBalance(0n);
+        }
+        return;
+      }
 
-    const parsedToken = Number(toToken);
+      try {
+        const [nextEthBalance, nextTokenBalance] = await Promise.all([
+          publicClient.getBalance({ address: connectedTradeAddress }),
+          publicClient.readContract({
+            abi: erc20Abi,
+            address: activeCoin.address as Address,
+            args: [connectedTradeAddress],
+            functionName: "balanceOf"
+          })
+        ]);
 
-    if (!Number.isFinite(parsedToken) || parsedToken < 0) {
-      return { fiat: "0", token: "0.00" };
-    }
-
-    const fiatCalc = parsedToken * activeCoin.priceNgn;
-    return {
-      fiat: fiatCalc.toLocaleString("en-NG"),
-      token: parsedToken.toFixed(2)
+        if (!cancelled) {
+          setEthBalance(nextEthBalance);
+          setTokenBalance(nextTokenBalance as bigint);
+        }
+      } catch {
+        if (!cancelled) {
+          setEthBalance(0n);
+          setTokenBalance(0n);
+        }
+      }
     };
-  }, [activeCoin.priceNgn, direction, parsedFiat, toToken]);
+
+    void readBalances();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeCoin.address,
+    balanceRefreshIndex,
+    connectedTradeAddress,
+    publicClient
+  ]);
+
+  const parsedAmount = Number.parseFloat(amount || "0");
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const isFiatRail = tradeRail === "fiat";
+
+  const makeTradeParams = (sender: Address): null | TradeParameters => {
+    if (!activeCoin.address || !hasValidAmount) {
+      return null;
+    }
+
+    try {
+      if (fromIsEth) {
+        return {
+          amountIn: parseEther(amount),
+          buy: { address: activeCoin.address as Address, type: "erc20" },
+          sell: { type: "eth" },
+          sender,
+          slippage: 0.1
+        };
+      }
+
+      return {
+        amountIn: parseUnits(amount, TOKEN_DECIMALS),
+        buy: { type: "eth" },
+        sell: { address: activeCoin.address as Address, type: "erc20" },
+        sender,
+        slippage: 0.1
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const run = async () => {
+      if (isFiatRail) {
+        setEstimatedOut("");
+        return;
+      }
+
+      if (!connectedTradeAddress) {
+        setEstimatedOut("");
+        return;
+      }
+
+      const params = makeTradeParams(connectedTradeAddress);
+
+      if (!params) {
+        setEstimatedOut("");
+        return;
+      }
+
+      try {
+        const quote = await createTradeCall(params);
+
+        if (!cancelled) {
+          setEstimatedOut(quote.quote.amountOut || "");
+        }
+      } catch {
+        if (!cancelled) {
+          setEstimatedOut("");
+        }
+      }
+    };
+
+    timeoutId = setTimeout(() => {
+      void run();
+    }, 300);
+
+    intervalId = setInterval(() => {
+      void run();
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [
+    activeCoin.address,
+    amount,
+    connectedTradeAddress,
+    fromIsEth,
+    isFiatRail
+  ]);
 
   const filteredCoins = useMemo(() => {
     const query = coinQuery.trim().toLowerCase();
@@ -464,53 +714,189 @@ const Swap = () => {
     [activeCoin.percentChange, activeCoin.volume, phase, priceBias]
   );
 
-  const payInputValue = fromIsFiat ? fromFiat : toToken;
-  const receiveInputValue = fromIsFiat ? computed.token : computed.fiat;
-  const normalizedComputedFiat = Number(
-    String(computed.fiat || "0").replace(/,/g, "")
+  const formattedEthBalance = Number(formatEther(ethBalance));
+  const formattedTokenBalance = Number(
+    formatUnits(tokenBalance, TOKEN_DECIMALS)
   );
-  const normalizedComputedToken = Number(computed.token || "0");
-  const payBalanceLabel = fromIsFiat
-    ? formatNgn(activeCoin.balanceNgn)
-    : `${formatSwapAmount(activeCoin.balanceToken, 2)} ${activeCoin.symbol}`;
-  const receiveBalanceLabel = fromIsFiat
-    ? `${formatSwapAmount(activeCoin.balanceToken, 2)} ${activeCoin.symbol}`
-    : formatNgn(activeCoin.balanceNgn);
-  const payHint = fromIsFiat
-    ? `Approx. ${formatSwapAmount(normalizedComputedToken)} ${activeCoin.symbol}`
-    : `Approx. ${formatNgn(normalizedComputedFiat)}`;
-  const receiveHint = fromIsFiat
-    ? `Approx. ${formatNgn(normalizedComputedFiat)}`
-    : `Approx. ${formatSwapAmount(Number(toToken || "0"))} ${activeCoin.symbol}`;
-  const estimatedNetworkFee = Math.max(
-    35,
-    Math.round(activeCoin.priceNgn * 0.18)
-  );
+  const availableEthToSwap = Math.max(formattedEthBalance - 0.0002, 0);
+  const hasSufficientBalance = hasValidAmount
+    ? fromIsEth
+      ? isFiatRail
+        ? true
+        : parsedAmount <= availableEthToSwap + 0.0000001
+      : parsedAmount <= formattedTokenBalance + 0.0000001
+    : false;
+  const receiveAmount = useMemo(() => {
+    if (isFiatRail || !estimatedOut) {
+      return 0;
+    }
+
+    if (!estimatedOut) {
+      return 0;
+    }
+
+    try {
+      return fromIsEth
+        ? Number(formatUnits(BigInt(estimatedOut), TOKEN_DECIMALS))
+        : Number(formatEther(BigInt(estimatedOut)));
+    } catch {
+      return 0;
+    }
+  }, [estimatedOut, fromIsEth, isFiatRail]);
+  const payInputValue = amount;
+  const receiveInputValue = isFiatRail
+    ? fiatQuote?.displayValue || "0"
+    : receiveAmount > 0
+      ? formatSwapAmount(receiveAmount, fromIsEth ? 2 : 6)
+      : "0";
+  const payBalanceLabel = isFiatRail
+    ? fromIsEth
+      ? "Every1 Naira wallet"
+      : `${formatSwapAmount(formattedTokenBalance, 4)} ${activeCoin.symbol}`
+    : fromIsEth
+      ? formatEthAmount(formattedEthBalance, formattedEthBalance >= 1 ? 4 : 6)
+      : `${formatSwapAmount(formattedTokenBalance, 4)} ${activeCoin.symbol}`;
+  const receiveBalanceLabel = isFiatRail
+    ? fromIsEth
+      ? `${formatSwapAmount(formattedTokenBalance, 4)} ${activeCoin.symbol}`
+      : "Every1 Naira wallet"
+    : fromIsEth
+      ? `${formatSwapAmount(formattedTokenBalance, 4)} ${activeCoin.symbol}`
+      : formatEthAmount(formattedEthBalance, formattedEthBalance >= 1 ? 4 : 6);
+  const quoteNgnValue =
+    receiveAmount > 0
+      ? fromIsEth
+        ? receiveAmount * activeCoin.priceNgn
+        : parsedAmount * activeCoin.priceNgn
+      : 0;
+  const payHint = isFiatRail
+    ? fromIsEth
+      ? "Use your Every1 Naira wallet balance"
+      : `Sell from your ${activeCoin.symbol} balance`
+    : fromIsEth
+      ? "Wallet pays gas on Base"
+      : `Sell from your ${activeCoin.symbol} balance`;
+  const receiveHint = isFiatRail
+    ? fiatQuoteError ||
+      (fiatQuote
+        ? "Secure quote ready"
+        : fromIsEth
+          ? `Get a secure quote for ${activeCoin.symbol}.`
+          : "See your estimated Naira return.")
+    : quoteNgnValue > 0
+      ? `Approx. ${formatNgn(quoteNgnValue)}`
+      : "Live quote";
+  const tradeInputLabel = hasValidAmount
+    ? fromIsEth
+      ? isFiatRail
+        ? formatNgn(parsedAmount)
+        : formatEthAmount(parsedAmount)
+      : `${formatSwapAmount(parsedAmount, 4)} ${activeCoin.symbol}`
+    : fromIsEth
+      ? isFiatRail
+        ? formatNgn(0)
+        : "0 ETH"
+      : `0 ${activeCoin.symbol}`;
+  const tradeOutputLabel = isFiatRail
+    ? fiatQuote?.amountLabel || (fromIsEth ? `0 ${activeCoin.symbol}` : "NGN 0")
+    : receiveAmount > 0
+      ? fromIsEth
+        ? `${formatSwapAmount(receiveAmount, 2)} ${activeCoin.symbol}`
+        : formatEthAmount(receiveAmount)
+      : fromIsEth
+        ? `0 ${activeCoin.symbol}`
+        : "0 ETH";
+  const tradeRouteLabel = isFiatRail
+    ? `${tradeInputLabel} -> ${tradeOutputLabel}`
+    : receiveAmount > 0
+      ? `${tradeInputLabel} -> ${tradeOutputLabel}`
+      : fromIsEth
+        ? isFiatRail
+          ? `NGN to ${activeCoin.symbol}`
+          : `ETH to ${activeCoin.symbol}`
+        : isFiatRail
+          ? `${activeCoin.symbol} to NGN`
+          : `${activeCoin.symbol} to ETH`;
+  const canSubmit = isFiatRail
+    ? Boolean(
+        activeCoin.address &&
+          connectedTradeAddress &&
+          fiatWalletClient?.account &&
+          profile?.id &&
+          hasValidAmount &&
+          hasSufficientBalance &&
+          !loading &&
+          !fiatQuoteLoading
+      )
+    : Boolean(
+        activeCoin.address &&
+          connectedTradeAddress &&
+          hasValidAmount &&
+          receiveAmount > 0 &&
+          hasSufficientBalance &&
+          !loading
+      );
+  const swapButtonLabel = isFiatRail
+    ? fiatQuote
+      ? fromIsEth
+        ? "Confirm buy"
+        : "Confirm sell"
+      : fiatQuoteLoading
+        ? "Getting quote..."
+        : fromIsEth
+          ? `Get ${activeCoin.symbol} quote`
+          : "Get Naira quote"
+    : fromIsEth
+      ? `Swap to ${activeCoin.symbol}`
+      : "Swap to ETH";
+  const swapStatusNote = connectedTradeAddress
+    ? hasValidAmount
+      ? hasSufficientBalance
+        ? isFiatRail
+          ? fiatQuoteError ||
+            fiatQuote?.summary ||
+            "Get a secure Naira trade quote, then confirm."
+          : "Live quote via Zora on Base."
+        : fromIsEth
+          ? isFiatRail
+            ? "Your Naira wallet balance will be checked at confirmation."
+            : "Keep a little ETH aside for gas."
+          : `Not enough ${activeCoin.symbol} balance.`
+      : isFiatRail
+        ? "Enter an amount to request a Naira trade quote."
+        : "Enter an amount to get a live quote."
+    : "Connect your wallet to swap.";
+  const quoteExpiryText = fiatQuote
+    ? `Valid until ${new Date(fiatQuote.expiresAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      })}`
+    : null;
   const marketTokens = trendingCoins.slice(0, 5);
   const marketHoldings = holdingCoins.slice(0, 5);
-  const marketHistory = (walletActivityQuery.data || [])
-    .slice(0, 5)
-    .map((entry) => {
-      const amount = Number(entry.amount) || 0;
-      const isPositive = amount >= 0;
-      const cleanAmount = formatSwapAmount(Math.abs(amount), 2);
-      const label =
-        entry.activityKind === "collaboration_payout"
-          ? "Collaboration payout"
-          : "FanDrop reward";
+  const rewardHistory = (walletActivityQuery.data || []).map((entry) => {
+    const rewardAmount = Number(entry.amount) || 0;
+    const isPositive = rewardAmount >= 0;
+    const cleanAmount = formatSwapAmount(Math.abs(rewardAmount), 2);
+    const label =
+      entry.activityKind === "collaboration_payout"
+        ? "Collaboration payout"
+        : "FanDrop reward";
 
-      return {
-        amount: `${isPositive ? "+" : "-"}${cleanAmount} ${entry.tokenSymbol}`,
-        id: entry.activityId,
-        isPositive,
-        label,
-        meta: `${entry.sourceName || "Every1"} - ${formatRelativeOrAbsolute(
-          entry.createdAt
-        )}`
-      };
-    });
+    return {
+      amount: `${isPositive ? "+" : "-"}${cleanAmount} ${entry.tokenSymbol}`,
+      id: entry.activityId,
+      isPositive,
+      label,
+      meta: `${entry.sourceName || "Every1"} - ${formatRelativeOrAbsolute(
+        entry.createdAt
+      )}`
+    } satisfies RecentSwapEntry;
+  });
+  const marketHistory = [...recentSwaps, ...rewardHistory].slice(0, 5);
   const tokensLoading = trendingQuery.isLoading;
-  const historyLoading = walletActivityQuery.isLoading;
+  const historyLoading =
+    walletActivityQuery.isLoading && recentSwaps.length === 0;
   const holdingsLoading = holdingsQuery.isLoading;
 
   const handleChartMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
@@ -544,28 +930,297 @@ const Swap = () => {
   };
 
   const handleMax = () => {
-    if (fromIsFiat) {
-      setFromFiat(String(activeCoin.balanceNgn));
+    if (fromIsEth) {
+      if (isFiatRail) {
+        setAmount("10000");
+        return;
+      }
+
+      setAmount(availableEthToSwap > 0 ? availableEthToSwap.toFixed(6) : "0");
       return;
     }
 
-    setToToken(activeCoin.balanceToken.toFixed(2));
+    setAmount(
+      formattedTokenBalance > 0 ? formattedTokenBalance.toFixed(4) : "0"
+    );
+  };
+
+  const handleFiatQuote = async () => {
+    if (!profile?.id || !connectedTradeAddress || !fiatWalletClient?.account) {
+      toast.error("Connect your wallet to continue.");
+      return;
+    }
+
+    if (!hasValidAmount) {
+      toast.error(
+        fromIsEth
+          ? "Enter the Naira amount you want to use."
+          : `Enter the ${activeCoin.symbol} amount you want to sell.`
+      );
+      return;
+    }
+
+    if (!hasSufficientBalance) {
+      toast.error(`Not enough ${activeCoin.symbol} balance.`);
+      return;
+    }
+
+    try {
+      setFiatQuoteLoading(true);
+      setFiatQuoteError(null);
+
+      if (fromIsEth) {
+        const quote = await getSupportQuote({
+          coinAddress: activeCoin.address as Address,
+          idempotencyKey: createFiatIdempotencyKey("swap-support-quote"),
+          nairaAmount: parsedAmount,
+          profileId: profile.id,
+          walletAddress: connectedTradeAddress,
+          walletClient: fiatWalletClient
+        });
+
+        setFiatQuote({
+          amountLabel: `${formatSwapAmount(
+            quote.estimated_coin_amount,
+            2
+          )} ${activeCoin.symbol}`,
+          displayValue: formatSwapAmount(quote.estimated_coin_amount, 2),
+          expiresAt: quote.expires_at,
+          quoteId: quote.quote_id,
+          summary: `You'll receive approximately ${formatSwapAmount(
+            quote.estimated_coin_amount,
+            2
+          )} ${activeCoin.symbol} after ${formatNgn(quote.fee_naira)} in fees.`
+        });
+      } else {
+        const quote = await getSellQuote({
+          coinAddress: activeCoin.address as Address,
+          coinAmount: parsedAmount,
+          idempotencyKey: createFiatIdempotencyKey("swap-sell-quote"),
+          profileId: profile.id,
+          walletAddress: connectedTradeAddress,
+          walletClient: fiatWalletClient
+        });
+
+        setFiatQuote({
+          amountLabel: formatNgn(quote.estimated_naira_return),
+          displayValue: quote.estimated_naira_return.toLocaleString("en-US", {
+            maximumFractionDigits: 0
+          }),
+          expiresAt: quote.expires_at,
+          quoteId: quote.quote_id,
+          settlement: {
+            address: quote.settlement.address as Address,
+            transferAmountLabel: quote.settlement.transfer_amount_label,
+            transferAmountRaw: quote.settlement.transfer_amount_raw
+          },
+          summary: `You'll receive approximately ${formatNgn(
+            quote.estimated_naira_return
+          )} after ${formatNgn(
+            quote.fee_naira
+          )} in fees once you confirm the secure wallet transfer.`
+        });
+      }
+    } catch (error) {
+      const message = normalizeFiatUiError(
+        error,
+        "Unable to get a Naira quote right now."
+      );
+      setFiatQuote(null);
+      setFiatQuoteError(message);
+      toast.error(message);
+    } finally {
+      setFiatQuoteLoading(false);
+    }
+  };
+
+  const handleFiatSubmit = async () => {
+    if (!profile?.id || !connectedTradeAddress || !fiatWalletClient?.account) {
+      toast.error("Connect your wallet to continue.");
+      return;
+    }
+
+    if (!fiatQuote) {
+      await handleFiatQuote();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setStatusModal({
+        description: fromIsEth
+          ? "Please wait while we complete your Naira buy trade."
+          : "Confirm the wallet transfer to continue with this sell.",
+        title: fromIsEth
+          ? `Buying ${activeCoin.name}`
+          : `Selling ${activeCoin.symbol}`,
+        tone: "pending"
+      });
+
+      const response = fromIsEth
+        ? await executeSupport({
+            idempotencyKey: createFiatIdempotencyKey("swap-support-execute"),
+            profileId: profile.id,
+            quoteId: fiatQuote.quoteId,
+            walletAddress: connectedTradeAddress,
+            walletClient: fiatWalletClient
+          })
+        : await (async () => {
+            const settlement = fiatQuote.settlement;
+
+            if (!settlement) {
+              throw new Error(
+                "This sell quote is missing its settlement instructions."
+              );
+            }
+
+            await handleWrongNetwork({ chainId: base.id });
+            const client =
+              (await getWalletClient(config, { chainId: base.id })) ||
+              walletClient;
+
+            if (!client?.account) {
+              throw new Error("Connect a Base wallet to complete this sell.");
+            }
+
+            const transferHash = await client.writeContract({
+              abi: erc20Abi,
+              account: client.account,
+              address: activeCoin.address as Address,
+              args: [settlement.address, BigInt(settlement.transferAmountRaw)],
+              functionName: "transfer"
+            });
+
+            await publicClient.waitForTransactionReceipt({
+              hash: transferHash,
+              timeout: 120000
+            });
+
+            setStatusModal({
+              description:
+                "Transfer confirmed. Finalizing your Naira wallet credit.",
+              title: `Settling ${activeCoin.symbol}`,
+              tone: "pending"
+            });
+
+            return await executeSell({
+              idempotencyKey: createFiatIdempotencyKey("swap-sell-execute"),
+              profileId: profile.id,
+              quoteId: fiatQuote.quoteId,
+              transactionHash: transferHash,
+              walletAddress: connectedTradeAddress,
+              walletClient: fiatWalletClient
+            });
+          })();
+
+      if (!response.success) {
+        throw new Error(response.message || "Unable to complete this request.");
+      }
+
+      if (response.status === "failed") {
+        throw new Error(
+          response.message || "This buy trade could not be completed."
+        );
+      }
+
+      setStatusModal({
+        description: response.message,
+        title: fromIsEth
+          ? response.status === "completed"
+            ? "Buy completed!"
+            : "Buy finalizing"
+          : response.status === "completed"
+            ? "Sell completed!"
+            : "Sell finalizing",
+        tone: response.status === "completed" ? "success" : "pending"
+      });
+
+      const recentSwapEntry = fromIsEth
+        ? {
+            amount: `+${fiatQuote.amountLabel}`,
+            id: `${fiatQuote.quoteId}-${Date.now()}`,
+            isPositive: true,
+            label: `Bought ${activeCoin.symbol}`,
+            meta: `${tradeRouteLabel} - Just now`
+          }
+        : (() => {
+            const sellResponse = response as SellExecuteResponse;
+
+            return {
+              amount: `+${formatNgn(
+                sellResponse.sell?.estimatedNairaReturn || 0
+              )}`,
+              id: `${sellResponse.sell?.id || fiatQuote.quoteId}-${Date.now()}`,
+              isPositive: true,
+              label: `Sold ${activeCoin.symbol}`,
+              meta: `${tradeRouteLabel} - Just now`
+            };
+          })();
+
+      setRecentSwaps((previous) => [recentSwapEntry, ...previous]);
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["fiat-wallet"]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["fiat-wallet-transactions"]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATIONS_QUERY_KEY, profile.id]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_NOTIFICATION_COUNT_QUERY_KEY, profile.id]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["swap-holdings", walletAddress]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_WALLET_ACTIVITY_QUERY_KEY, profile?.id || null]
+        })
+      ]);
+
+      setBalanceRefreshIndex((previous) => previous + 1);
+
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+
+      setAmount("");
+      setFiatQuote(null);
+      setStatusModal(null);
+    } catch (error) {
+      const message = normalizeFiatUiError(
+        error,
+        "Unable to complete this Naira request right now."
+      );
+      setStatusModal(null);
+      setFiatQuoteError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderAssetPill = ({
-    fiat,
+    eth,
     onClick
   }: {
-    fiat: boolean;
+    eth: boolean;
     onClick?: () => void;
   }) => {
-    if (fiat) {
+    if (eth) {
       return (
         <div className="inline-flex items-center gap-1.5 rounded-full border-0 bg-white px-2.5 py-1.5 font-semibold text-gray-900 text-xs shadow-none ring-0 md:gap-1.5 md:px-2.5 md:py-1.5 md:text-xs dark:bg-[#2b2d34] dark:text-white">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ece7ff] text-[#6d28d9] text-[11px] md:h-6 md:w-6 md:text-[11px] dark:bg-black/25 dark:text-white">
-            NG
+          <span
+            className={cn(
+              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] md:h-6 md:w-6 md:text-[11px]",
+              isFiatRail
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200"
+                : "bg-[#ece7ff] text-[#6d28d9] dark:bg-black/25 dark:text-white"
+            )}
+          >
+            {isFiatRail ? "NGN" : "ETH"}
           </span>
-          NGN
+          {isFiatRail ? "NGN" : "ETH"}
         </div>
       );
     }
@@ -594,19 +1249,26 @@ const Swap = () => {
   };
 
   const renderMobileAssetPill = ({
-    fiat,
+    eth,
     onClick
   }: {
-    fiat: boolean;
+    eth: boolean;
     onClick?: () => void;
   }) => {
-    if (fiat) {
+    if (eth) {
       return (
         <div className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-1 font-semibold text-[10px] text-gray-900 dark:bg-[#34363e] dark:text-white">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#d9cffc] text-[#3b2a6d] text-[9px] dark:bg-[#4a3f73] dark:text-white">
-            NG
+          <span
+            className={cn(
+              "flex h-5 w-5 items-center justify-center rounded-full text-[9px]",
+              isFiatRail
+                ? "bg-emerald-500 text-white"
+                : "bg-[#d9cffc] text-[#3b2a6d] dark:bg-[#4a3f73] dark:text-white"
+            )}
+          >
+            {isFiatRail ? "NGN" : "ETH"}
           </span>
-          NGN
+          {isFiatRail ? "NGN" : "ETH"}
         </div>
       );
     }
@@ -861,6 +1523,154 @@ const Swap = () => {
     </>
   );
 
+  const handleSubmit = async () => {
+    if (isFiatRail) {
+      await handleFiatSubmit();
+      return;
+    }
+
+    const senderAddress = connectedTradeAddress;
+
+    if (!senderAddress || !isAddress(senderAddress)) {
+      toast.error("Connect a wallet to swap");
+      return;
+    }
+
+    if (!hasSufficientBalance) {
+      toast.error(
+        fromIsEth
+          ? "Not enough ETH balance for this swap"
+          : `Not enough ${activeCoin.symbol} balance`
+      );
+      return;
+    }
+
+    const initialParams = makeTradeParams(senderAddress);
+
+    if (!initialParams) {
+      toast.error("Enter a valid amount to swap");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setStatusModal({
+        description: "Please wait while we complete your swap.",
+        title: `Swapping ${tradeInputLabel} - ${tradeOutputLabel}`,
+        tone: "pending"
+      });
+
+      await handleWrongNetwork({ chainId: base.id });
+
+      const client =
+        (await getWalletClient(config, { chainId: base.id })) || walletClient;
+      const clientSender = client?.account?.address || senderAddress;
+
+      if (!client || !isAddress(clientSender)) {
+        setStatusModal(null);
+        toast.error("Please connect a wallet on Base");
+        return;
+      }
+
+      const liveParams = makeTradeParams(clientSender);
+
+      if (!liveParams) {
+        setStatusModal(null);
+        toast.error("Enter a valid amount to swap");
+        return;
+      }
+
+      const receipt = await tradeCoin({
+        account: client.account,
+        publicClient,
+        tradeParameters: liveParams,
+        validateTransaction: false,
+        walletClient: client
+      });
+
+      setRecentSwaps((previous) => [
+        {
+          amount: `+${tradeOutputLabel}`,
+          id: receipt.transactionHash,
+          isPositive: true,
+          label: fromIsEth
+            ? `Bought ${activeCoin.symbol}`
+            : `Sold ${activeCoin.symbol}`,
+          meta: `${tradeRouteLabel} - Just now`
+        },
+        ...previous.filter((entry) => entry.id !== receipt.transactionHash)
+      ]);
+
+      setStatusModal({
+        description: "Trade successful, enjoy your profits!",
+        title: "Nice trade!",
+        tone: "success"
+      });
+
+      if (profile?.id) {
+        try {
+          const rewardResult = await recordReferralTradeReward({
+            chainId: base.id,
+            coinAddress: activeCoin.address,
+            coinSymbol: activeCoin.symbol || activeCoin.name || "COIN",
+            profileId: profile.id,
+            tradeAmountIn: parsedAmount,
+            tradeAmountOut: receiveAmount,
+            tradeSide: fromIsEth ? "buy" : "sell",
+            txHash: receipt.transactionHash
+          });
+
+          if (rewardResult.rewardGranted) {
+            toast.success("Referral reward unlocked", {
+              description: `+${Number(rewardResult.rewardAmount || 0).toFixed(
+                4
+              )} ${rewardResult.rewardSymbol} and +${
+                rewardResult.e1xpAwarded || 50
+              } E1XP`
+            });
+
+            await Promise.all([
+              queryClient.invalidateQueries({
+                queryKey: [EVERY1_REFERRAL_DASHBOARD_QUERY_KEY, profile.id]
+              }),
+              queryClient.invalidateQueries({
+                queryKey: [EVERY1_NOTIFICATIONS_QUERY_KEY, profile.id]
+              }),
+              queryClient.invalidateQueries({
+                queryKey: [EVERY1_NOTIFICATION_COUNT_QUERY_KEY, profile.id]
+              })
+            ]);
+          }
+        } catch (rewardError) {
+          console.error("Failed to record referral reward", rewardError);
+        }
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["swap-holdings", walletAddress]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [EVERY1_WALLET_ACTIVITY_QUERY_KEY, profile?.id || null]
+        })
+      ]);
+
+      setBalanceRefreshIndex((previous) => previous + 1);
+
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+
+      setAmount("");
+      setEstimatedOut("");
+      setStatusModal(null);
+    } catch (error) {
+      console.error("Swap failed", error);
+      setStatusModal(null);
+      toast.error("Swap failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <PageLayout
       description="A self-serve swap page for AyoCoin."
@@ -1011,6 +1821,37 @@ const Swap = () => {
               </div>
             </Card>
 
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <div className="inline-flex rounded-full bg-gray-100 p-1 dark:bg-[#1b1d22]">
+                {(
+                  [
+                    { label: "Naira", value: "fiat" },
+                    { label: "Onchain", value: "onchain" }
+                  ] as const
+                ).map((option) => (
+                  <button
+                    className={cn(
+                      "rounded-full px-3 py-1.5 font-semibold text-[11px] transition-colors",
+                      tradeRail === option.value
+                        ? "bg-gray-950 text-white dark:bg-white dark:text-[#111111]"
+                        : "text-gray-500 dark:text-white/60"
+                    )}
+                    key={option.value}
+                    onClick={() => setTradeRail(option.value)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {quoteExpiryText ? (
+                <p className="text-[10px] text-gray-500 dark:text-white/42">
+                  {quoteExpiryText}
+                </p>
+              ) : null}
+            </div>
+
             <Card
               className="overflow-hidden border border-gray-200/80 bg-white p-1.5 text-gray-900 shadow-none md:hidden dark:border-white/8 dark:bg-[#191b20] dark:text-white"
               forceRounded
@@ -1030,19 +1871,15 @@ const Swap = () => {
                             /[^0-9.]/g,
                             ""
                           );
-                          if (fromIsFiat) {
-                            setFromFiat(next);
-                          } else {
-                            setToToken(next);
-                          }
+                          setAmount(next);
                         }}
                         placeholder="0"
                         value={payInputValue}
                       />
                     </div>
                     {renderMobileAssetPill({
-                      fiat: fromIsFiat,
-                      onClick: fromIsFiat
+                      eth: fromIsEth,
+                      onClick: fromIsEth
                         ? undefined
                         : () => setIsCoinPickerOpen(true)
                     })}
@@ -1069,9 +1906,7 @@ const Swap = () => {
                     className="inline-flex h-5.5 w-5.5 items-center justify-center rounded-full border-[2px] border-white bg-[#b79cff] text-[#191919] dark:border-[#191b20]"
                     onClick={() =>
                       setDirection((previous) =>
-                        previous === "fiatToToken"
-                          ? "tokenToFiat"
-                          : "fiatToToken"
+                        previous === "ethToToken" ? "tokenToEth" : "ethToToken"
                       )
                     }
                     type="button"
@@ -1095,8 +1930,8 @@ const Swap = () => {
                       />
                     </div>
                     {renderMobileAssetPill({
-                      fiat: !fromIsFiat,
-                      onClick: fromIsFiat
+                      eth: !fromIsEth,
+                      onClick: fromIsEth
                         ? () => setIsCoinPickerOpen(true)
                         : undefined
                     })}
@@ -1112,6 +1947,20 @@ const Swap = () => {
                 </div>
               </div>
             </Card>
+
+            <div className="px-0.5 md:hidden">
+              <Button
+                className="w-full rounded-[1rem] border-none bg-[linear-gradient(90deg,#4f46e5_0%,#3b82f6_35%,#7c3aed_100%)] py-2.5 font-semibold text-[13px] text-white hover:opacity-95"
+                disabled={!canSubmit}
+                loading={loading || fiatQuoteLoading}
+                onClick={handleSubmit}
+              >
+                {swapButtonLabel}
+              </Button>
+              <p className="mt-1 text-center text-[10px] text-gray-500 dark:text-white/42">
+                {swapStatusNote}
+              </p>
+            </div>
 
             <Card
               className="hidden overflow-hidden border border-gray-200/80 bg-white p-2.5 text-gray-950 shadow-none md:block md:p-2 dark:border-white/8 dark:bg-[#111217] dark:text-white"
@@ -1133,19 +1982,15 @@ const Swap = () => {
                               /[^0-9.]/g,
                               ""
                             );
-                            if (fromIsFiat) {
-                              setFromFiat(next);
-                            } else {
-                              setToToken(next);
-                            }
+                            setAmount(next);
                           }}
                           placeholder="0"
                           value={payInputValue}
                         />
                       </div>
                       {renderAssetPill({
-                        fiat: fromIsFiat,
-                        onClick: fromIsFiat
+                        eth: fromIsEth,
+                        onClick: fromIsEth
                           ? undefined
                           : () => setIsCoinPickerOpen(true)
                       })}
@@ -1175,9 +2020,9 @@ const Swap = () => {
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border-4 border-white bg-[#b79cff] text-[#141414] shadow-[0_10px_22px_-16px_rgba(124,58,237,0.8)] md:h-9 md:w-9 dark:border-[#111217] dark:bg-[#b79cff]"
                       onClick={() =>
                         setDirection((previous) =>
-                          previous === "fiatToToken"
-                            ? "tokenToFiat"
-                            : "fiatToToken"
+                          previous === "ethToToken"
+                            ? "tokenToEth"
+                            : "ethToToken"
                         )
                       }
                       type="button"
@@ -1201,8 +2046,8 @@ const Swap = () => {
                         />
                       </div>
                       {renderAssetPill({
-                        fiat: !fromIsFiat,
-                        onClick: fromIsFiat
+                        eth: !fromIsEth,
+                        onClick: fromIsEth
                           ? () => setIsCoinPickerOpen(true)
                           : undefined
                       })}
@@ -1222,24 +2067,29 @@ const Swap = () => {
 
               <div className="mt-1.5 rounded-[1rem] border border-gray-200/80 bg-gray-50 px-2.5 py-2 md:px-2.5 md:py-1.5 dark:border-white/8 dark:bg-[#17191f]">
                 <div className="flex items-center justify-between text-[10px] text-gray-500 md:text-[10px] dark:text-white/48">
-                  <span>Network fee</span>
+                  <span>Execution</span>
                   <span className="font-semibold text-gray-900 dark:text-white">
-                    {formatNgn(estimatedNetworkFee)}
+                    {isFiatRail ? "Naira wallet flow" : "Onchain on Base"}
                   </span>
                 </div>
                 <div className="mt-0.5 flex items-center justify-between text-[10px] text-gray-500 md:text-[10px] dark:text-white/48">
-                  <span>Rate</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    1 {activeCoin.symbol} = {formatNgn(activeCoin.priceNgn)}
+                  <span>Route</span>
+                  <span className="truncate pl-3 font-semibold text-gray-900 dark:text-white">
+                    {tradeRouteLabel}
                   </span>
                 </div>
               </div>
 
-              <Button className="mt-1.5 w-full rounded-[1.2rem] border-none bg-[linear-gradient(90deg,#4f46e5_0%,#3b82f6_35%,#7c3aed_100%)] py-3 font-semibold text-[14px] text-white hover:opacity-95 md:py-2.5 md:text-sm">
-                Swap now
+              <Button
+                className="mt-1.5 w-full rounded-[1.2rem] border-none bg-[linear-gradient(90deg,#4f46e5_0%,#3b82f6_35%,#7c3aed_100%)] py-3 font-semibold text-[14px] text-white hover:opacity-95 md:py-2.5 md:text-sm"
+                disabled={!canSubmit}
+                loading={loading || fiatQuoteLoading}
+                onClick={handleSubmit}
+              >
+                {swapButtonLabel}
               </Button>
               <p className="mt-1 text-center text-[10px] text-gray-500 md:text-[10px] dark:text-white/42">
-                Live quote. Instant swap flow.
+                {swapStatusNote}
               </p>
             </Card>
 
@@ -1340,6 +2190,15 @@ const Swap = () => {
               </div>
             </div>
           </div>
+        ) : null}
+
+        {statusModal ? (
+          <ActionStatusModal
+            description={statusModal.description}
+            show={Boolean(statusModal)}
+            title={statusModal.title}
+            tone={statusModal.tone}
+          />
         ) : null}
       </div>
     </PageLayout>

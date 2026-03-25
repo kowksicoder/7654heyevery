@@ -8,6 +8,11 @@ import {
 } from "@zoralabs/coins-sdk";
 import { DEFAULT_AVATAR } from "@/data/constants";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
+import {
+  fetchPlatformDiscoverCoins,
+  mergePriorityItemsByAddress,
+  type PlatformDiscoverCoin
+} from "@/helpers/platformDiscovery";
 
 const zoraApiKey = getZoraApiKey();
 
@@ -27,6 +32,7 @@ export interface SearchDiscoverCoin {
   creatorDisplayName?: null | string;
   creatorHandle?: null | string;
   imageUrl: string;
+  isPlatformCreated?: boolean;
   marketCap?: null | string;
   marketCapDelta24h?: null | string;
   name: string;
@@ -45,7 +51,10 @@ const parseMetric = (value?: null | number | string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const mapCoin = (item: ExploreCoinNode): SearchDiscoverCoin => ({
+const mapCoin = (
+  item: ExploreCoinNode | PlatformDiscoverCoin,
+  isPlatformCreated = false
+): SearchDiscoverCoin => ({
   address: item.address,
   creatorAddress: item.creatorAddress,
   creatorDisplayName: item.creatorProfile?.handle || null,
@@ -55,6 +64,7 @@ const mapCoin = (item: ExploreCoinNode): SearchDiscoverCoin => ({
     item.mediaContent?.previewImage?.small ||
     item.creatorProfile?.avatar?.previewImage?.medium ||
     DEFAULT_AVATAR,
+  isPlatformCreated,
   marketCap: item.marketCap,
   marketCapDelta24h: item.marketCapDelta24h,
   name: item.name || item.symbol || item.address,
@@ -80,6 +90,10 @@ const dedupeCoins = (items: SearchDiscoverCoin[]) => {
 
 const sortByDiscoveryWeight = (items: SearchDiscoverCoin[]) =>
   [...items].sort((a, b) => {
+    if (a.isPlatformCreated !== b.isPlatformCreated) {
+      return a.isPlatformCreated ? -1 : 1;
+    }
+
     const aScore =
       parseMetric(a.volume24h) * 3 +
       parseMetric(a.marketCap) +
@@ -144,18 +158,24 @@ const scoreCoin = (coin: SearchDiscoverCoin, normalizedQuery: string) => {
     score += 100;
   }
 
+  if (coin.isPlatformCreated) {
+    score += 180;
+  }
+
   return score;
 };
 
 const fetchDiscoveryPools = async (count = 36) => {
-  const responses = await Promise.all([
+  const [platformCoins, ...responses] = await Promise.all([
+    fetchPlatformDiscoverCoins({
+      limit: Math.max(Math.min(count, 24), 12)
+    }).catch(() => [] as PlatformDiscoverCoin[]),
     getExploreTopVolumeAll24h({ count }),
     getExploreNewAll({ count }),
     getCoinsLastTradedUnique({ count }),
     getCoinsMostValuable({ count })
   ]);
-
-  return responses
+  const zoraCoins = responses
     .flatMap((response) => response.data?.exploreList?.edges ?? [])
     .map((edge) => edge.node)
     .filter(
@@ -164,13 +184,23 @@ const fetchDiscoveryPools = async (count = 36) => {
         !item.platformBlocked &&
         !item.creatorProfile?.platformBlocked
     )
-    .map(mapCoin);
+    .map((item) => mapCoin(item));
+
+  return mergePriorityItemsByAddress(
+    platformCoins.map((item) => mapCoin(item, true)),
+    zoraCoins
+  );
 };
 
 export const fetchTrendingSearchCoins = async (limit = 3) => {
-  const response = await getExploreTopVolumeAll24h({
-    count: Math.max(limit, 6)
-  });
+  const [platformCoins, response] = await Promise.all([
+    fetchPlatformDiscoverCoins({
+      limit: Math.max(Math.min(limit * 2, 12), 6)
+    }).catch(() => [] as PlatformDiscoverCoin[]),
+    getExploreTopVolumeAll24h({
+      count: Math.max(limit, 6)
+    })
+  ]);
   const items =
     response.data?.exploreList?.edges
       ?.map((edge) => edge.node)
@@ -180,9 +210,14 @@ export const fetchTrendingSearchCoins = async (limit = 3) => {
           !item.platformBlocked &&
           !item.creatorProfile?.platformBlocked
       )
-      .map(mapCoin) ?? [];
+      .map((item) => mapCoin(item)) ?? [];
 
-  return dedupeCoins(items).slice(0, limit);
+  return dedupeCoins(
+    mergePriorityItemsByAddress(
+      platformCoins.map((item) => mapCoin(item, true)),
+      items
+    )
+  ).slice(0, limit);
 };
 
 export const searchDiscoverCoins = async (query: string, limit = 24) => {
@@ -200,6 +235,10 @@ export const searchDiscoverCoins = async (query: string, limit = 24) => {
     }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => {
+      if (a.item.isPlatformCreated !== b.item.isPlatformCreated) {
+        return a.item.isPlatformCreated ? -1 : 1;
+      }
+
       if (b.score !== a.score) {
         return b.score - a.score;
       }

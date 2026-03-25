@@ -15,6 +15,11 @@ import {
   listPublicCollaborationCoins
 } from "@/helpers/every1";
 import getZoraApiKey from "@/helpers/getZoraApiKey";
+import { getPlatformLaunchCategoryForFeedType } from "@/helpers/platformCategories";
+import {
+  fetchPlatformDiscoverCoins,
+  mergePriorityItemsByAddress
+} from "@/helpers/platformDiscovery";
 import useLoadMoreOnIntersect from "@/hooks/useLoadMoreOnIntersect";
 import { useHomeTabStore } from "@/store/persisted/useHomeTabStore";
 import WhoToFollowFeedBlock from "./WhoToFollowFeedBlock";
@@ -168,16 +173,64 @@ const ZoraFeed = () => {
     queryKey: [ZORA_HOME_FEED_QUERY_KEY, feedType],
     staleTime: 30_000
   });
+  const platformPriorityQuery = useQuery({
+    enabled: feedType !== HomeFeedType.COLLABORATIONS,
+    queryFn: async () =>
+      await fetchPlatformDiscoverCoins({
+        category: getPlatformLaunchCategoryForFeedType(feedType),
+        limit: 10
+      }),
+    queryKey: ["platform-priority-feed-coins", feedType],
+    staleTime: 30_000
+  });
+  const platformPriorityItems = useMemo(
+    () => (platformPriorityQuery.data || []) as ZoraFeedItem[],
+    [platformPriorityQuery.data]
+  );
+  const platformPriorityOrder = useMemo(
+    () =>
+      new Map(
+        platformPriorityItems.map((item, index) => [
+          item.address.toLowerCase(),
+          index
+        ])
+      ),
+    [platformPriorityItems]
+  );
 
   const items = useMemo(
     () =>
-      [...(data?.pages.flatMap((page) => page.items) ?? [])].sort((a, b) => {
+      mergePriorityItemsByAddress(
+        platformPriorityItems,
+        (data?.pages.flatMap((page) => page.items) ?? []) as ZoraFeedItem[]
+      ).sort((a, b) => {
+        const aPriorityRank = platformPriorityOrder.get(
+          a.address.toLowerCase()
+        );
+        const bPriorityRank = platformPriorityOrder.get(
+          b.address.toLowerCase()
+        );
+
+        if (aPriorityRank !== undefined || bPriorityRank !== undefined) {
+          if (aPriorityRank === undefined) {
+            return 1;
+          }
+
+          if (bPriorityRank === undefined) {
+            return -1;
+          }
+
+          if (aPriorityRank !== bPriorityRank) {
+            return aPriorityRank - bPriorityRank;
+          }
+        }
+
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
 
         return sortMode === HomeFeedSort.OLDEST ? aTime - bTime : bTime - aTime;
       }),
-    [data?.pages, sortMode]
+    [data?.pages, platformPriorityItems, platformPriorityOrder, sortMode]
   );
   const collaborationMetadataQuery = useQuery({
     enabled: items.length > 0,

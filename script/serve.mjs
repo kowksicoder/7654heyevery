@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { createCollaborationRuntime } from "./collaborationRuntime.mjs";
 import { createFanDropRuntime } from "./fandropRuntime.mjs";
+import { createFiatRuntime } from "./fiatRuntime.mjs";
+import { createProfileShareRuntime } from "./profileShareRuntime.mjs";
 import { createPushRuntime } from "./pushRuntime.mjs";
 import { createVerificationRuntime } from "./verificationRuntime.mjs";
 
@@ -16,6 +18,8 @@ const distDir = path.join(rootDir, "dist");
 const indexHtmlPath = path.join(distDir, "index.html");
 const collaborationRuntime = createCollaborationRuntime({ rootDir });
 const fanDropRuntime = createFanDropRuntime({ rootDir });
+const fiatRuntime = createFiatRuntime({ rootDir });
+const profileShareRuntime = createProfileShareRuntime({ rootDir });
 const pushRuntime = createPushRuntime({ rootDir });
 const verificationRuntime = createVerificationRuntime({ rootDir });
 
@@ -695,7 +699,10 @@ const buildProfileMeta = async ({
       description:
         cleanWhitespace(profile.bio) ||
         `View ${displayHandle || titleName}'s public profile on Every1.`,
-      image: profile.bannerUrl || profile.avatarUrl || DEFAULT_META.image,
+      image: profileShareRuntime.buildProfileShareCardPath({
+        address: profile.walletAddress || profile.address,
+        handle
+      }),
       title: `${titleName}${displayHandle ? ` (${displayHandle})` : ""} - Every1`,
       type: "profile",
       url: canonicalPath
@@ -896,6 +903,7 @@ const serve = async () => {
   const port = Number(process.env.PORT || 4783);
 
   collaborationRuntime.start();
+  fiatRuntime.start();
   pushRuntime.start();
   verificationRuntime.start();
   fanDropRuntime.start();
@@ -908,6 +916,12 @@ const serve = async () => {
       );
 
       if (collaborationHandled) {
+        return;
+      }
+
+      const fiatHandled = await fiatRuntime.handleApiRequest(request, response);
+
+      if (fiatHandled) {
         return;
       }
 
@@ -932,6 +946,15 @@ const serve = async () => {
       );
 
       if (fanDropHandled) {
+        return;
+      }
+
+      const profileShareHandled = await profileShareRuntime.handleRequest(
+        request,
+        response
+      );
+
+      if (profileShareHandled) {
         return;
       }
 

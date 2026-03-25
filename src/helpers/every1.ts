@@ -1505,6 +1505,7 @@ export const createCollaborationCoinInvite = async (
   input: Every1CollaborationInviteInput
 ) =>
   callRpc<Every1CollaborationInviteResult>("create_collaboration_coin_invite", {
+    input_category: input.category || null,
     input_chain_id: 8453,
     input_collaborator_profile_id: input.collaboratorProfileId,
     input_collaborator_split: toNumber(100 - input.creatorSplit),

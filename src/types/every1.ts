@@ -313,6 +313,7 @@ export interface Every1Collaboration {
 }
 
 export interface Every1CollaborationInviteInput {
+  category?: null | string;
   collaboratorProfileId: string;
   collaboratorUsername: string;
   coverImageUrl?: null | string;
