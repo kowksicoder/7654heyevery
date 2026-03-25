@@ -1439,16 +1439,18 @@ const MobileCoinView = ({
               leaveFrom="translate-y-0"
               leaveTo="translate-y-full"
             >
-              <DialogPanel className="h-[min(68dvh,34rem)] w-full overflow-hidden rounded-t-[1.15rem] bg-white shadow-2xl dark:bg-[#111111]">
+              <DialogPanel className="flex h-screen w-full flex-col overflow-hidden bg-white pt-[max(env(safe-area-inset-top),0px)] shadow-2xl supports-[height:100dvh]:h-[100dvh] dark:bg-[#111111]">
                 <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-gray-300 dark:bg-white/15" />
-                {tradeMode ? (
-                  <Trade
-                    coin={coin}
-                    initialMode={tradeMode}
-                    onClose={() => setTradeMode(null)}
-                    variant="mobile"
-                  />
-                ) : null}
+                <div className="min-h-0 flex-1">
+                  {tradeMode ? (
+                    <Trade
+                      coin={coin}
+                      initialMode={tradeMode}
+                      onClose={() => setTradeMode(null)}
+                      variant="mobile"
+                    />
+                  ) : null}
+                </div>
               </DialogPanel>
             </TransitionChild>
           </div>
