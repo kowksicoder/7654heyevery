@@ -1,5 +1,5 @@
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { memo } from "react";
 import cn from "@/helpers/cn";
 import Button from "./Button";
@@ -11,6 +11,7 @@ type ActionStatusTone = "pending" | "success";
 interface ActionStatusModalProps {
   actionLabel?: string;
   description?: string;
+  footer?: ReactNode;
   label?: string;
   onAction?: () => void;
   onClose?: () => void;
@@ -34,6 +35,7 @@ const CONFETTI_PIECES = [
 const ActionStatusModal = ({
   actionLabel,
   description,
+  footer,
   label,
   onAction,
   onClose,
@@ -100,6 +102,8 @@ const ActionStatusModal = ({
             {description}
           </p>
         ) : null}
+
+        {footer ? <div className="mt-3">{footer}</div> : null}
 
         {actionLabel ? (
           <div className="mt-4">

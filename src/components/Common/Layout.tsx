@@ -11,7 +11,7 @@ import GlobalModals from "@/components/Shared/GlobalModals";
 import Navbar from "@/components/Shared/Navbar";
 import BottomNavigation from "@/components/Shared/Navbar/BottomNavigation";
 import MobileHeader from "@/components/Shared/Navbar/MobileHeader";
-import { ActionStatusModal, Spinner } from "@/components/Shared/UI";
+import { ActionStatusModal, Button, Spinner } from "@/components/Shared/UI";
 import { HomeFeedView } from "@/data/enums";
 import cn from "@/helpers/cn";
 import {
@@ -26,6 +26,14 @@ import { useHomeTabStore } from "@/store/persisted/useHomeTabStore";
 import Every1RuntimeBridge from "./Every1RuntimeBridge";
 import ReloadTabsWatcher from "./ReloadTabsWatcher";
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+}
+
 const Layout = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -35,6 +43,10 @@ const Layout = () => {
     useEvery1Store();
   const { viewMode } = useHomeTabStore();
   const isMounted = useIsClient();
+  const [deferredInstallPrompt, setDeferredInstallPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const [mobileSplashReady, setMobileSplashReady] = useState(false);
   const { authenticated, ready, user } = usePrivy();
   const isStaffRoute = pathname.startsWith("/staff");
@@ -69,17 +81,60 @@ const Layout = () => {
     }
 
     const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const getStandaloneState = () =>
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean(
+        (
+          window.navigator as Navigator & {
+            standalone?: boolean;
+          }
+        ).standalone
+      );
+    const handleInstallPrompt = (event: Event) => {
+      const nextPrompt = event as BeforeInstallPromptEvent;
+      nextPrompt.preventDefault();
+      setDeferredInstallPrompt(nextPrompt);
+    };
+    const syncInstallSurface = () => {
+      setIsMobileViewport(mediaQuery.matches);
+      setIsStandalone(getStandaloneState());
+    };
+    const handleAppInstalled = () => {
+      setDeferredInstallPrompt(null);
+      setIsStandalone(true);
+    };
+
+    syncInstallSurface();
 
     if (!mediaQuery.matches) {
       setMobileSplashReady(true);
-      return;
     }
 
-    const timer = window.setTimeout(() => {
-      setMobileSplashReady(true);
-    }, 2000);
+    const timer = mediaQuery.matches
+      ? window.setTimeout(() => {
+          setMobileSplashReady(true);
+        }, 2000)
+      : null;
 
-    return () => window.clearTimeout(timer);
+    mediaQuery.addEventListener("change", syncInstallSurface);
+    window.addEventListener(
+      "beforeinstallprompt",
+      handleInstallPrompt as EventListener
+    );
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+
+      mediaQuery.removeEventListener("change", syncInstallSurface);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleInstallPrompt as EventListener
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
   }, [isMounted]);
 
   useEffect(() => {
@@ -128,6 +183,46 @@ const Layout = () => {
     navigate("/create");
   };
 
+  const handleAddToHome = async () => {
+    if (!deferredInstallPrompt) {
+      return;
+    }
+
+    await deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+
+    if (result.outcome === "accepted") {
+      setDeferredInstallPrompt(null);
+      setIsStandalone(true);
+    }
+  };
+
+  const installNudgeFooter =
+    signupCelebrationProfileId && isMobileViewport && !isStandalone ? (
+      <div className="mx-auto max-w-[17rem] rounded-[20px] border border-sky-200/80 bg-sky-50/80 px-3 py-3 text-left dark:border-sky-400/14 dark:bg-sky-500/8">
+        <p className="font-semibold text-[12px] text-gray-950 dark:text-gray-50">
+          Add Every1 to Home
+        </p>
+        <p className="mt-1 text-[11px] text-gray-600 leading-5 dark:text-gray-400">
+          {deferredInstallPrompt
+            ? "Install Every1 to your home screen for a faster, app-like experience on mobile."
+            : "For the full app feel on iPhone, tap Share in Safari and choose Add to Home Screen."}
+        </p>
+        {deferredInstallPrompt ? (
+          <Button
+            className="mt-3 w-full justify-center"
+            onClick={() => {
+              void handleAddToHome();
+            }}
+            outline
+            size="sm"
+          >
+            Add to home
+          </Button>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <>
       <Toaster
@@ -158,6 +253,7 @@ const Layout = () => {
       <ActionStatusModal
         actionLabel="Launch a coin"
         description="Nice work! Your account is ready. Launch your first coin and start building."
+        footer={installNudgeFooter}
         label="Signup successful"
         onAction={handleLaunchCoin}
         onClose={handleSignupCelebrationClose}
