@@ -530,232 +530,228 @@ const Balances = () => {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="overflow-hidden border border-gray-200/65 bg-white text-gray-900 md:rounded-[2rem] dark:border-gray-800/75 dark:bg-black dark:text-white">
+  const renderOnchainWalletContent = () => {
+    if (loading) {
+      return <Loader className="my-16" />;
+    }
+
+    if (needsAuthenticatedIndexer) {
+      return authenticating ? (
         <Loader className="my-16" />
-      </div>
-    );
-  }
+      ) : (
+        <ErrorMessage
+          className="m-5"
+          error={{
+            message:
+              "Sign in again to finish wallet authentication and load your balances."
+          }}
+          title="Authentication required"
+        />
+      );
+    }
 
-  if (needsAuthenticatedIndexer) {
-    return (
-      <div className="overflow-hidden border border-gray-200/65 bg-white text-gray-900 md:rounded-[2rem] dark:border-gray-800/75 dark:bg-black dark:text-white">
-        {authenticating ? (
-          <Loader className="my-16" />
-        ) : (
-          <ErrorMessage
-            className="m-5"
-            error={{
-              message:
-                "Sign in again to finish wallet authentication and load your balances."
-            }}
-            title="Authentication required"
-          />
-        )}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="overflow-hidden border border-gray-200/65 bg-white text-gray-900 md:rounded-[2rem] dark:border-gray-800/75 dark:bg-black dark:text-white">
+    if (error) {
+      return (
         <ErrorMessage
           className="m-5"
           error={error}
           title="Failed to load balances"
         />
+      );
+    }
+
+    return (
+      <div className="mx-auto max-w-[42rem] px-3 py-2.5 sm:px-5 md:px-6 md:py-5">
+        <div>
+          <p className="font-semibold text-[2.3rem] leading-none tracking-tight md:text-[3.75rem]">
+            {formatCurrency(totalAvailableBalance)}
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-1.5 md:mt-5 md:gap-2">
+          <button
+            className={heroActionClassName}
+            onClick={() => setShowDepositModal(true)}
+            type="button"
+          >
+            <ArrowDownTrayIcon className="size-4 md:size-5" />
+            <span className="font-semibold text-xs md:text-sm">Deposit</span>
+          </button>
+
+          <button
+            className={cn(
+              heroActionClassName,
+              !preferredActionAsset && "cursor-not-allowed opacity-40"
+            )}
+            disabled={!preferredActionAsset}
+            onClick={() => setSelectedAsset(preferredActionAsset)}
+            type="button"
+          >
+            <ArrowUpIcon className="size-4 md:size-5" />
+            <span className="font-semibold text-xs md:text-sm">Send</span>
+          </button>
+
+          <Link className={heroActionClassName} to="/swap">
+            <ArrowsRightLeftIcon className="size-4 md:size-5" />
+            <span className="font-semibold text-xs md:text-sm">Swap</span>
+          </Link>
+        </div>
+
+        <div className="no-scrollbar mt-4 flex items-center gap-3 overflow-x-auto border-gray-200 border-b pb-1 md:mt-6 md:gap-5 dark:border-white/10">
+          {[
+            { key: "coins", label: "Coins" },
+            { key: "collectibles", label: "Collectibles" },
+            { key: "activity", label: "Activity" }
+          ].map((tab) => (
+            <button
+              className={cn(
+                "relative shrink-0 pb-2 font-medium text-base transition md:pb-2.5 md:text-xl",
+                activeTab === tab.key
+                  ? "text-gray-900 dark:text-white"
+                  : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              )}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as FundsTab)}
+              type="button"
+            >
+              {tab.label}
+              {activeTab === tab.key ? (
+                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-gray-900 dark:bg-white" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "coins" ? (
+          <div className="mt-4 space-y-5 md:mt-5 md:space-y-6">
+            <div className="space-y-5 md:space-y-6">
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3 md:mb-3">
+                  <h2 className="font-semibold text-lg md:text-xl">
+                    Cash Balance
+                  </h2>
+                </div>
+                <div className="space-y-1">
+                  {cashAssets.length > 0 ? (
+                    cashAssets.map((asset) => (
+                      <SectionRow
+                        asset={asset}
+                        key={asset.id}
+                        onOpen={setSelectedAsset}
+                      />
+                    ))
+                  ) : (
+                    <p className="py-1.5 text-gray-500 text-sm md:text-base dark:text-gray-500">
+                      No cash balance yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3 md:mb-3">
+                  <h2 className="font-semibold text-lg md:text-xl">
+                    Other Balances
+                  </h2>
+                </div>
+                <div className="space-y-1">
+                  {otherAssets.length > 0 ? (
+                    otherAssets.map((asset) => (
+                      <SectionRow
+                        asset={asset}
+                        key={asset.id}
+                        onOpen={setSelectedAsset}
+                      />
+                    ))
+                  ) : (
+                    <p className="py-1.5 text-gray-500 text-sm md:text-base dark:text-gray-500">
+                      Other token balances will show up here.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "collectibles" ? (
+          <div className="mt-4 rounded-[1.2rem] bg-gray-50 p-3.5 md:mt-5 md:rounded-[1.5rem] md:p-4 dark:bg-[#17181d]">
+            <p className="font-semibold text-lg md:text-2xl">Collectibles</p>
+            <p className="mt-1 text-gray-500 text-xs md:mt-1.5 md:text-sm dark:text-gray-400">
+              Your collectible balances will show here once supported assets are
+              connected to this wallet.
+            </p>
+          </div>
+        ) : null}
+
+        {activeTab === "activity" ? (
+          <div className="mt-4 rounded-[1.2rem] bg-gray-50 p-3.5 md:mt-5 md:rounded-[1.5rem] md:p-4 dark:bg-[#17181d]">
+            <p className="font-semibold text-lg md:text-2xl">Activity</p>
+            <p className="mt-1 text-gray-500 text-xs md:mt-1.5 md:text-sm dark:text-gray-400">
+              Reward sends and payout history land here once tokens hit your
+              wallet.
+            </p>
+
+            {walletActivityQuery.isLoading ? (
+              <Loader className="my-10" />
+            ) : walletActivityQuery.error ? (
+              <ErrorMessage
+                className="mt-4"
+                error={walletActivityQuery.error as { message?: string }}
+                title="Failed to load wallet activity"
+              />
+            ) : walletActivity.length ? (
+              <div className="mt-4 divide-y divide-gray-200 dark:divide-white/10">
+                {walletActivity.map((activity) => {
+                  const title =
+                    activity.activityKind === "collaboration_payout"
+                      ? "Collaboration payout"
+                      : "FanDrop reward";
+                  const caption =
+                    activity.activityKind === "collaboration_payout"
+                      ? `From ${activity.sourceName}`
+                      : `${activity.sourceName} auto-sent your reward`;
+
+                  return (
+                    <ActivityRow
+                      amountLabel={formatTokenAmount(
+                        activity.amount,
+                        activity.tokenSymbol
+                      )}
+                      caption={caption}
+                      href={activity.targetKey}
+                      key={activity.activityId}
+                      statusLabel={
+                        activity.activityKind === "collaboration_payout"
+                          ? "Paid"
+                          : "Sent"
+                      }
+                      symbol={activity.tokenSymbol}
+                      timeLabel={formatRelativeOrAbsolute(activity.createdAt)}
+                      title={title}
+                      txHash={activity.txHash}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 text-gray-500 text-sm dark:text-gray-400">
+                FanDrop rewards and collaboration payouts will show up here
+                after they are sent.
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
     );
-  }
+  };
 
   return (
     <>
       <FiatWalletPanel />
 
       <section className="overflow-hidden border border-gray-200/65 bg-white text-gray-900 md:rounded-[2rem] dark:border-gray-800/75 dark:bg-black dark:text-white">
-        <div className="mx-auto max-w-[42rem] px-3 py-2.5 sm:px-5 md:px-6 md:py-5">
-          <div>
-            <p className="font-semibold text-[2.3rem] leading-none tracking-tight md:text-[3.75rem]">
-              {formatCurrency(totalAvailableBalance)}
-            </p>
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-1.5 md:mt-5 md:gap-2">
-            <button
-              className={heroActionClassName}
-              onClick={() => setShowDepositModal(true)}
-              type="button"
-            >
-              <ArrowDownTrayIcon className="size-4 md:size-5" />
-              <span className="font-semibold text-xs md:text-sm">Deposit</span>
-            </button>
-
-            <button
-              className={cn(
-                heroActionClassName,
-                !preferredActionAsset && "cursor-not-allowed opacity-40"
-              )}
-              disabled={!preferredActionAsset}
-              onClick={() => setSelectedAsset(preferredActionAsset)}
-              type="button"
-            >
-              <ArrowUpIcon className="size-4 md:size-5" />
-              <span className="font-semibold text-xs md:text-sm">Send</span>
-            </button>
-
-            <Link className={heroActionClassName} to="/swap">
-              <ArrowsRightLeftIcon className="size-4 md:size-5" />
-              <span className="font-semibold text-xs md:text-sm">Swap</span>
-            </Link>
-          </div>
-
-          <div className="no-scrollbar mt-4 flex items-center gap-3 overflow-x-auto border-gray-200 border-b pb-1 md:mt-6 md:gap-5 dark:border-white/10">
-            {[
-              { key: "coins", label: "Coins" },
-              { key: "collectibles", label: "Collectibles" },
-              { key: "activity", label: "Activity" }
-            ].map((tab) => (
-              <button
-                className={cn(
-                  "relative shrink-0 pb-2 font-medium text-base transition md:pb-2.5 md:text-xl",
-                  activeTab === tab.key
-                    ? "text-gray-900 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                )}
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as FundsTab)}
-                type="button"
-              >
-                {tab.label}
-                {activeTab === tab.key ? (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-gray-900 dark:bg-white" />
-                ) : null}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === "coins" ? (
-            <div className="mt-4 space-y-5 md:mt-5 md:space-y-6">
-              <div className="space-y-5 md:space-y-6">
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3 md:mb-3">
-                    <h2 className="font-semibold text-lg md:text-xl">
-                      Cash Balance
-                    </h2>
-                  </div>
-                  <div className="space-y-1">
-                    {cashAssets.length > 0 ? (
-                      cashAssets.map((asset) => (
-                        <SectionRow
-                          asset={asset}
-                          key={asset.id}
-                          onOpen={setSelectedAsset}
-                        />
-                      ))
-                    ) : (
-                      <p className="py-1.5 text-gray-500 text-sm md:text-base dark:text-gray-500">
-                        No cash balance yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3 md:mb-3">
-                    <h2 className="font-semibold text-lg md:text-xl">
-                      Other Balances
-                    </h2>
-                  </div>
-                  <div className="space-y-1">
-                    {otherAssets.length > 0 ? (
-                      otherAssets.map((asset) => (
-                        <SectionRow
-                          asset={asset}
-                          key={asset.id}
-                          onOpen={setSelectedAsset}
-                        />
-                      ))
-                    ) : (
-                      <p className="py-1.5 text-gray-500 text-sm md:text-base dark:text-gray-500">
-                        Other token balances will show up here.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {activeTab === "collectibles" ? (
-            <div className="mt-4 rounded-[1.2rem] bg-gray-50 p-3.5 md:mt-5 md:rounded-[1.5rem] md:p-4 dark:bg-[#17181d]">
-              <p className="font-semibold text-lg md:text-2xl">Collectibles</p>
-              <p className="mt-1 text-gray-500 text-xs md:mt-1.5 md:text-sm dark:text-gray-400">
-                Your collectible balances will show here once supported assets
-                are connected to this wallet.
-              </p>
-            </div>
-          ) : null}
-
-          {activeTab === "activity" ? (
-            <div className="mt-4 rounded-[1.2rem] bg-gray-50 p-3.5 md:mt-5 md:rounded-[1.5rem] md:p-4 dark:bg-[#17181d]">
-              <p className="font-semibold text-lg md:text-2xl">Activity</p>
-              <p className="mt-1 text-gray-500 text-xs md:mt-1.5 md:text-sm dark:text-gray-400">
-                Reward sends and payout history land here once tokens hit your
-                wallet.
-              </p>
-
-              {walletActivityQuery.isLoading ? (
-                <Loader className="my-10" />
-              ) : walletActivityQuery.error ? (
-                <ErrorMessage
-                  className="mt-4"
-                  error={walletActivityQuery.error as { message?: string }}
-                  title="Failed to load wallet activity"
-                />
-              ) : walletActivity.length ? (
-                <div className="mt-4 divide-y divide-gray-200 dark:divide-white/10">
-                  {walletActivity.map((activity) => {
-                    const title =
-                      activity.activityKind === "collaboration_payout"
-                        ? "Collaboration payout"
-                        : "FanDrop reward";
-                    const caption =
-                      activity.activityKind === "collaboration_payout"
-                        ? `From ${activity.sourceName}`
-                        : `${activity.sourceName} auto-sent your reward`;
-
-                    return (
-                      <ActivityRow
-                        amountLabel={formatTokenAmount(
-                          activity.amount,
-                          activity.tokenSymbol
-                        )}
-                        caption={caption}
-                        href={activity.targetKey}
-                        key={activity.activityId}
-                        statusLabel={
-                          activity.activityKind === "collaboration_payout"
-                            ? "Paid"
-                            : "Sent"
-                        }
-                        symbol={activity.tokenSymbol}
-                        timeLabel={formatRelativeOrAbsolute(activity.createdAt)}
-                        title={title}
-                        txHash={activity.txHash}
-                      />
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-4 text-gray-500 text-sm dark:text-gray-400">
-                  FanDrop rewards and collaboration payouts will show up here
-                  after they are sent.
-                </p>
-              )}
-            </div>
-          ) : null}
-        </div>
+        {renderOnchainWalletContent()}
       </section>
 
       <AssetActionsModal

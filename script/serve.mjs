@@ -34,6 +34,9 @@ const DEFAULT_META = {
   url: "/"
 };
 
+const BASE_APP_ID_META_TAG =
+  '<meta name="base:app_id" content="694fcee74d3a403912ed823a">';
+
 const STATIC_ROUTE_META = {
   "/": {
     description: "Discover creator coins, profiles, and communities on Every1.",
@@ -318,6 +321,9 @@ const stripSeoTags = (html) =>
 
 const injectMeta = (html, meta) => {
   const strippedHtml = stripSeoTags(html);
+  const baseAppMeta = strippedHtml.includes('name="base:app_id"')
+    ? ""
+    : `${BASE_APP_ID_META_TAG}\n    `;
   const metaBlock = [
     `<title>${escapeHtml(meta.title)}</title>`,
     `<meta name="title" content="${escapeHtml(meta.title)}">`,
@@ -336,7 +342,10 @@ const injectMeta = (html, meta) => {
     `<meta name="twitter:image" content="${escapeHtml(meta.image)}">`
   ].join("\n    ");
 
-  return strippedHtml.replace("</head>", `    ${metaBlock}\n  </head>`);
+  return strippedHtml.replace(
+    "</head>",
+    `    ${baseAppMeta}${metaBlock}\n  </head>`
+  );
 };
 
 const queryLens = async (query, variables) => {

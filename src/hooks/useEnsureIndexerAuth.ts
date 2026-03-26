@@ -29,6 +29,11 @@ const useEnsureIndexerAuth = () => {
 
   const accountAddress = currentAccount?.address;
   const ownerAddress = currentAccount?.owner || walletClient?.account?.address;
+  const isDirectWalletAccount = Boolean(
+    accountAddress &&
+      ownerAddress &&
+      accountAddress.toLowerCase() === ownerAddress.toLowerCase()
+  );
   const authAttemptKey =
     accountAddress && ownerAddress ? `${accountAddress}:${ownerAddress}` : null;
   const shouldAuthenticate =
@@ -68,12 +73,18 @@ const useEnsureIndexerAuth = () => {
 
         const { data: challengeData } = await challengeMutation({
           variables: {
-            request: {
-              accountOwner: {
-                account: accountAddress,
-                owner: ownerAddress
-              }
-            }
+            request: isDirectWalletAccount
+              ? {
+                  onboardingUser: {
+                    wallet: ownerAddress
+                  }
+                }
+              : {
+                  accountOwner: {
+                    account: accountAddress,
+                    owner: ownerAddress
+                  }
+                }
           }
         });
 
@@ -153,6 +164,7 @@ const useEnsureIndexerAuth = () => {
     authAttemptKey,
     authenticateMutation,
     challengeMutation,
+    isDirectWalletAccount,
     ownerAddress,
     shouldAuthenticate,
     walletClient
