@@ -326,31 +326,6 @@ const CreatorWeekSlider = () => {
 
   return (
     <div className="space-y-2.5">
-      {slides.length > 1 ? (
-        <div className="flex items-center justify-between">
-          <Title>Weekly spotlight</Title>
-          <div className="inline-flex rounded-full bg-gray-100 p-0.5 dark:bg-[#101011]">
-            {slides.map((slide, index) => {
-              const isActive = index === activeSlide;
-              return (
-                <button
-                  className={`rounded-full px-2.5 py-1 font-semibold text-[10px] transition ${
-                    isActive
-                      ? "bg-white text-gray-900 shadow-sm dark:bg-[#1b1b20] dark:text-white"
-                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  }`}
-                  key={slide.key}
-                  onClick={() => setActiveSlide(index)}
-                  type="button"
-                >
-                  {slide.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
       <div className="overflow-hidden">
         <div
           className="flex transition-transform duration-300"
@@ -363,6 +338,27 @@ const CreatorWeekSlider = () => {
           ))}
         </div>
       </div>
+
+      {slides.length > 1 ? (
+        <div className="flex items-center justify-center gap-1.5">
+          {slides.map((slide, index) => {
+            const isActive = index === activeSlide;
+            return (
+              <button
+                aria-label={`Show ${slide.label.toLowerCase()} spotlight`}
+                className={`h-1.5 rounded-full transition-all ${
+                  isActive
+                    ? "w-5 bg-gray-900 dark:bg-white"
+                    : "w-1.5 bg-gray-300 dark:bg-white/20"
+                }`}
+                key={slide.key}
+                onClick={() => setActiveSlide(index)}
+                type="button"
+              />
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 };
