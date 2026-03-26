@@ -4,6 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { getCoin, setApiKey as setZoraApiKey } from "@zoralabs/coins-sdk";
+import { isAddress } from "viem";
 import { createCollaborationRuntime } from "./collaborationRuntime.mjs";
 import { createFanDropRuntime } from "./fandropRuntime.mjs";
 import { createFiatRuntime } from "./fiatRuntime.mjs";
@@ -128,6 +130,7 @@ const MIME_TYPES = {
 const LENS_API_URL = "https://api.lens.xyz/graphql";
 const IPFS_GATEWAY = "https://gw.ipfs-lens.dev/ipfs/";
 const STORAGE_NODE_URL = "https://api.grove.storage/";
+const BASE_CHAIN_ID = 8453;
 
 const stripQuotes = (value) => {
   if (
@@ -171,6 +174,15 @@ const loadEnvFile = (filePath) => {
 
 loadEnvFile(path.join(rootDir, ".env"));
 loadEnvFile(path.join(rootDir, ".env.local"));
+
+const zoraApiKey =
+  process.env.VITE_NEXT_PUBLIC_ZORA_API_KEY ||
+  process.env.VITE_ZORA_API_KEY ||
+  process.env.ZORA_API_KEY;
+
+if (zoraApiKey) {
+  setZoraApiKey(zoraApiKey);
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseKey =
@@ -666,13 +678,7 @@ const fetchCommunityBySlug = async (slug) => {
   return data?.[0] || null;
 };
 
-const buildProfileMeta = async ({
-  address,
-  legacyPath,
-  origin,
-  pathname,
-  username
-}) => {
+const buildProfileMeta = async ({ address, origin, pathname, username }) => {
   const profile = await resolveProfile({ address, username });
 
   if (!profile) {
@@ -707,7 +713,72 @@ const buildProfileMeta = async ({
       type: "profile",
       url: canonicalPath
     }),
-    redirectPath: legacyPath && handle ? canonicalPath : null
+    redirectPath: null
+  };
+};
+
+const fetchCoinByAddress = async (address) => {
+  if (!isAddress(address)) {
+    return null;
+  }
+
+  const response = await getCoin({
+    address,
+    chain: BASE_CHAIN_ID
+  }).catch(() => null);
+
+  return response?.data?.zora20Token || null;
+};
+
+const getCoinMetaImage = (coin) =>
+  sanitizeStorageUrl(
+    coin?.mediaContent?.previewImage?.medium ||
+      coin?.mediaContent?.previewImage?.small ||
+      coin?.creatorProfile?.avatar?.previewImage?.medium ||
+      coin?.creatorProfile?.avatar?.previewImage?.small ||
+      DEFAULT_META.image
+  );
+
+const getCoinCreatorLabel = (coin) => {
+  const handle = normalizeHandle(coin?.creatorProfile?.handle);
+
+  if (handle) {
+    return `@${handle}`;
+  }
+
+  return formatShortAddress(coin?.creatorAddress);
+};
+
+const buildCoinMeta = async ({ address, origin, pathname }) => {
+  const coin = await fetchCoinByAddress(address).catch(() => null);
+
+  if (!coin) {
+    return {
+      meta: buildMeta(origin, {
+        description: "Review live coin stats and open the Every1 trade flow.",
+        image: DEFAULT_META.image,
+        title: "Trade coin - Every1",
+        type: "website",
+        url: pathname
+      })
+    };
+  }
+
+  const symbol = coin.symbol?.trim();
+  const name = coin.name?.trim() || symbol || "Coin";
+  const creatorLabel = getCoinCreatorLabel(coin);
+  const description =
+    cleanWhitespace(coin.description) ||
+    `${name}${creatorLabel ? ` from ${creatorLabel}` : ""} is live on Every1.`;
+
+  return {
+    meta: buildMeta(origin, {
+      description,
+      image: getCoinMetaImage(coin),
+      title: symbol ? `${name} ($${symbol}) - Every1` : `${name} - Every1`,
+      type: "website",
+      url: pathname
+    })
   };
 };
 
@@ -822,7 +893,6 @@ const resolveRouteMeta = async ({ origin, pathname }) => {
 
   if (usernameMatch) {
     return buildProfileMeta({
-      legacyPath: normalizedPath.startsWith("/u/"),
       origin,
       pathname: normalizedPath,
       username: decodeURIComponent(usernameMatch[1])
@@ -834,7 +904,6 @@ const resolveRouteMeta = async ({ origin, pathname }) => {
   if (addressMatch) {
     return buildProfileMeta({
       address: decodeURIComponent(addressMatch[1]),
-      legacyPath: true,
       origin,
       pathname: normalizedPath
     });
@@ -868,6 +937,16 @@ const resolveRouteMeta = async ({ origin, pathname }) => {
       origin,
       pathname: normalizedPath,
       slug: decodeURIComponent(communityMatch[1])
+    });
+  }
+
+  const coinMatch = normalizedPath.match(/^\/coins\/([^/]+)$/);
+
+  if (coinMatch) {
+    return buildCoinMeta({
+      address: decodeURIComponent(coinMatch[1]),
+      origin,
+      pathname: normalizedPath
     });
   }
 
