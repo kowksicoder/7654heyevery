@@ -94,6 +94,7 @@ const Create = () => {
     identityWalletAddress,
     identityWalletClient,
     isLinkingExecutionWallet,
+    prepareExecutionWallet,
     smartWalletEnabled,
     smartWalletError,
     smartWalletLoading
@@ -176,6 +177,12 @@ const Create = () => {
       : "Creator");
   const previewCoinTitle = name.trim() || `${previewTicker.toUpperCase()} coin`;
   const mediaImportConfig = getMediaImportConfig(selectedCategory);
+  const walletSetupHint = smartWalletEnabled
+    ? executionWalletStatus.isReady
+      ? "Every1 covers network fees for coin creation."
+      : smartWalletError ||
+        "Every1 covers network fees for coin creation. We'll prepare your Every1 wallet after you continue."
+    : "Every1 covers network fees for coin creation. Launches will reopen once gas sponsorship is back online.";
   const topCopy = isCommunity
     ? {
         actionLabel: "Create community coin",
@@ -451,13 +458,6 @@ const Create = () => {
       return;
     }
 
-    if (!executionWalletStatus.isReady) {
-      toast.error(
-        executionWalletStatus.message || "Preparing your Every1 wallet on Base."
-      );
-      return;
-    }
-
     if (!canSubmit || !selectedFile) {
       toast.error("Add a ticker, name, and image before continuing.");
       return;
@@ -473,8 +473,39 @@ const Create = () => {
       return;
     }
 
+    if (!smartWalletEnabled) {
+      toast.error(
+        "Coin creation is temporarily unavailable because Every1 gas sponsorship is offline."
+      );
+      return;
+    }
+
     try {
       setIsSubmitting(true);
+      let client = toViemWalletClient(executionWalletClient);
+      let creatorAddress = executionWalletAddress as Address | undefined;
+
+      if (!client || !creatorAddress || !executionWalletStatus.isReady) {
+        setStatusModal({
+          description: "This should only take a moment.",
+          title: "Preparing your Every1 wallet",
+          tone: "pending"
+        });
+
+        const preparedWallet = await prepareExecutionWallet();
+        client = preparedWallet.executionWalletClient;
+        creatorAddress = preparedWallet.executionWalletAddress as
+          | Address
+          | undefined;
+
+        if (!client || !creatorAddress || !client.account) {
+          throw new Error(
+            smartWalletError ||
+              "Every1 couldn't prepare your gas-sponsored wallet on Base yet."
+          );
+        }
+      }
+
       setStatusModal({
         description: isCommunity
           ? "Publishing your community coin and linked group."
@@ -487,15 +518,6 @@ const Create = () => {
         tone: "pending"
       });
       await handleWrongNetwork({ chainId: base.id });
-      const client = toViemWalletClient(executionWalletClient);
-      const creatorAddress = executionWalletAddress as Address | undefined;
-
-      if (!client || !creatorAddress) {
-        throw new Error(
-          executionWalletStatus.message ||
-            "Preparing your Every1 wallet on Base."
-        );
-      }
 
       const metadataUpload = await createMetadataBuilder()
         .withName(name.trim())
@@ -1198,27 +1220,21 @@ const Create = () => {
         className={cn(
           "w-full rounded-full font-semibold transition",
           desktop ? "mt-3 px-6 py-3.5 text-xl" : "mt-2.5 px-4 py-2.5 text-sm",
-          canSubmit && !isSubmitting && executionWalletStatus.isReady
+          canSubmit && !isSubmitting
             ? "bg-gray-950 text-white dark:bg-white dark:text-black"
             : "bg-gray-200 text-gray-400 dark:bg-white/16 dark:text-white/40"
         )}
-        disabled={!canSubmit || isSubmitting || !executionWalletStatus.isReady}
+        disabled={!canSubmit || isSubmitting}
         onClick={handleSubmit}
         type="button"
       >
-        {isSubmitting
-          ? "Creating..."
-          : executionWalletStatus.isReady
-            ? submitLabel
-            : executionWalletStatus.isPreparing
-              ? "Preparing wallet..."
-              : submitLabel}
+        {isSubmitting ? "Creating..." : submitLabel}
       </button>
-      {executionWalletStatus.isReady ? null : (
+      {walletSetupHint ? (
         <p className="mt-2 text-center text-[11px] text-gray-500 dark:text-white/52">
-          {executionWalletStatus.message}
+          {walletSetupHint}
         </p>
-      )}
+      ) : null}
     </div>
   );
 

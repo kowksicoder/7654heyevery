@@ -3,15 +3,11 @@ import { memo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import evLogo from "@/assets/fonts/evlogo.jpg";
 import { Image } from "@/components/Shared/UI";
-import { DEFAULT_COLLECT_TOKEN, NATIVE_TOKEN_SYMBOL } from "@/data/constants";
 import getAvatar from "@/helpers/getAvatar";
-import nFormatter from "@/helpers/nFormatter";
 import { hasSupabaseConfig } from "@/helpers/supabase";
-import useEnsureIndexerAuth from "@/hooks/useEnsureIndexerAuth";
 import useEvery1MobileNavBadgeCounts from "@/hooks/useEvery1MobileNavBadgeCounts";
 import useEvery1UnreadCount from "@/hooks/useEvery1UnreadCount";
 import useHasNewNotifications from "@/hooks/useHasNewNotifications";
-import { useBalancesBulkQuery } from "@/indexer/generated";
 import { useMobileDrawerModalStore } from "@/store/non-persisted/modal/useMobileDrawerModalStore";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { useEvery1Store } from "@/store/persisted/useEvery1Store";
@@ -22,7 +18,6 @@ const MobileHeader = () => {
   const { currentAccount } = useAccountStore();
   const { profile } = useEvery1Store();
   const { setShow: setShowMobileDrawer } = useMobileDrawerModalStore();
-  const { canUseAuthenticatedIndexer } = useEnsureIndexerAuth();
   const isHomePage = pathname === "/";
   const hasNewNotifications = useHasNewNotifications();
   const { leaderboardCount } = useEvery1MobileNavBadgeCounts();
@@ -36,17 +31,6 @@ const MobileHeader = () => {
   const leaderboardBadgeCount = pathname.startsWith("/leaderboard")
     ? 0
     : leaderboardCount;
-  const { data: balanceData } = useBalancesBulkQuery({
-    pollInterval: 5000,
-    skip: !currentAccount?.address || !canUseAuthenticatedIndexer,
-    variables: {
-      request: {
-        address: currentAccount?.address,
-        includeNative: true,
-        tokens: [DEFAULT_COLLECT_TOKEN]
-      }
-    }
-  });
 
   const handleDrawerOpen = useCallback(() => {
     setShowMobileDrawer(true);
@@ -60,24 +44,6 @@ const MobileHeader = () => {
 
     navigate("/");
   }, [navigate]);
-
-  const nativeBalance = balanceData?.balancesBulk.find(
-    (balance) => balance.__typename === "NativeAmount"
-  );
-  const wrappedBalance = balanceData?.balancesBulk.find(
-    (balance) =>
-      balance.__typename === "Erc20Amount" &&
-      balance.asset.contract.address.toLowerCase() ===
-        DEFAULT_COLLECT_TOKEN.toLowerCase()
-  );
-  const totalWalletBalance =
-    Number.parseFloat(
-      nativeBalance?.__typename === "NativeAmount" ? nativeBalance.value : "0"
-    ) +
-    Number.parseFloat(
-      wrappedBalance?.__typename === "Erc20Amount" ? wrappedBalance.value : "0"
-    );
-  const walletBadgeLabel = `${nFormatter(totalWalletBalance, 2) || "0"} ${NATIVE_TOKEN_SYMBOL}`;
 
   return (
     <header className="sticky top-0 z-[6] bg-gray-50 px-4 py-3 md:hidden dark:bg-black">
@@ -158,7 +124,7 @@ const MobileHeader = () => {
               className="inline-flex h-8 max-w-[6.75rem] items-center truncate rounded-full bg-[#14b85a] px-2.5 font-semibold text-[11px] text-white leading-none transition-colors hover:bg-[#11a350] dark:bg-[#14b85a] dark:text-white dark:hover:bg-[#11a350]"
               to="/wallet"
             >
-              {walletBadgeLabel}
+              Wallet
             </Link>
           </div>
         </div>

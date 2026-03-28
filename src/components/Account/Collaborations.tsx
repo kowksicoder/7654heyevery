@@ -11,8 +11,6 @@ import { toast } from "sonner";
 import type { Address } from "viem";
 import { createPublicClient, erc20Abi, formatUnits, http } from "viem";
 import { base } from "viem/chains";
-import { useAccount, useConfig, useWalletClient } from "wagmi";
-import { getWalletClient } from "wagmi/actions";
 import Loader from "@/components/Shared/Loader";
 import { BASE_RPC_URL, ZORA_API_KEY } from "@/data/constants";
 import formatRelativeOrAbsolute from "@/helpers/datetime/formatRelativeOrAbsolute";
@@ -526,16 +524,16 @@ const Collaborations = ({
   isCurrentProfile: boolean;
 }) => {
   const navigate = useNavigate();
-  const { address } = useAccount();
-  const config = useConfig();
-  const { data: walletClient } = useWalletClient({ chainId: base.id });
   const queryClient = useQueryClient();
   const { profile } = useEvery1Store();
   const {
     executionWalletAddress,
     executionWalletClient,
     identityWalletAddress,
-    identityWalletClient
+    identityWalletClient,
+    prepareExecutionWallet,
+    smartWalletEnabled,
+    smartWalletError
   } = useEvery1ExecutionWallet();
   const [actingCollaborationId, setActingCollaborationId] = useState<
     null | string
@@ -810,8 +808,8 @@ const Collaborations = ({
       return;
     }
 
-    if (!address && !profile?.walletAddress) {
-      toast.error("Your Every1 wallet is not ready on Base yet.");
+    if (!profile?.id) {
+      toast.error("Sign in to launch this collaboration coin.");
       return;
     }
 
@@ -822,24 +820,41 @@ const Collaborations = ({
 
     try {
       setActingCollaborationId(collaboration.collaborationId);
+      if (!smartWalletEnabled) {
+        throw new Error(
+          "Collaboration launch is temporarily unavailable because Every1 gas sponsorship is offline."
+        );
+      }
+
+      let client = toViemWalletClient(executionWalletClient);
+      let creatorAddress = executionWalletAddress as Address | undefined;
+
+      if (!client || !creatorAddress) {
+        setStatusModal({
+          description: "This should only take a moment.",
+          title: "Preparing your Every1 wallet",
+          tone: "pending"
+        });
+
+        const preparedWallet = await prepareExecutionWallet();
+        client = preparedWallet.executionWalletClient || client;
+        creatorAddress = (preparedWallet.executionWalletAddress ||
+          creatorAddress) as Address | undefined;
+      }
+
+      if (!client || !creatorAddress || !client.account) {
+        throw new Error(
+          smartWalletError ||
+            "Every1 couldn't prepare your gas-sponsored wallet on Base yet."
+        );
+      }
+
       setStatusModal({
         description:
           "Everyone accepted the split. You're taking the collaboration live now.",
         title: "Launching your collaboration coin, please wait",
         tone: "pending"
       });
-
-      const client =
-        toViemWalletClient(executionWalletClient) ||
-        (await getWalletClient(config, { chainId: base.id })) ||
-        walletClient;
-      const creatorAddress = (profile?.walletAddress ||
-        address ||
-        executionWalletAddress) as Address | undefined;
-
-      if (!client || !creatorAddress) {
-        throw new Error("Your Every1 wallet is not ready on Base yet.");
-      }
 
       const metadataResponse = await fetch(
         sanitizeDStorageUrl(collaboration.metadataUri)

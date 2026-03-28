@@ -23,7 +23,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import { useEvery1Store } from "@/store/persisted/useEvery1Store";
 import { useHomeTabStore } from "@/store/persisted/useHomeTabStore";
-import Every1ExecutionWalletBridge from "./Every1ExecutionWalletBridge";
 import Every1RuntimeBridge from "./Every1RuntimeBridge";
 import Every1WalletSync from "./Every1WalletSync";
 import ProductTourModal from "./ProductTourModal";
@@ -262,7 +261,6 @@ const Layout = () => {
       <GlobalAlerts />
       <ReloadTabsWatcher />
       {hasPrivy ? <Every1WalletSync /> : null}
-      {hasPrivy ? <Every1ExecutionWalletBridge /> : null}
       <Every1RuntimeBridge />
       <ActionStatusModal
         actionLabel="Launch a coin"

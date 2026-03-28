@@ -5,7 +5,7 @@ import { Link } from "react-router";
 import type { Address } from "viem";
 import TopUpButton from "@/components/Shared/Account/TopUp/Button";
 import Loader from "@/components/Shared/Loader";
-import { ErrorMessage, Image, Modal } from "@/components/Shared/UI";
+import { Button, ErrorMessage, Image, Modal } from "@/components/Shared/UI";
 import {
   DEFAULT_COLLECT_TOKEN,
   NATIVE_TOKEN_SYMBOL,
@@ -353,12 +353,14 @@ const ActivityRow = ({
 const Balances = () => {
   const { currentAccount } = useAccountStore();
   const { profile } = useEvery1Store();
+  const [activeTab, setActiveTab] = useState<FundsTab>("tokens");
+  const [onchainAccessRequested, setOnchainAccessRequested] = useState(false);
   const {
+    authenticateIndexer,
     authenticating,
     canUseAuthenticatedIndexer,
     needsAuthenticatedIndexer
-  } = useEnsureIndexerAuth();
-  const [activeTab, setActiveTab] = useState<FundsTab>("tokens");
+  } = useEnsureIndexerAuth({ enabled: onchainAccessRequested });
   const [selectedAsset, setSelectedAsset] = useState<FundsAsset | null>(null);
   const rewardTokensQuery = useQuery({
     enabled: Boolean(profile?.id),
@@ -382,7 +384,10 @@ const Balances = () => {
   );
   const { data, loading, error, refetch } = useBalancesBulkQuery({
     pollInterval: 5000,
-    skip: !currentAccount?.address || !canUseAuthenticatedIndexer,
+    skip:
+      !currentAccount?.address ||
+      !onchainAccessRequested ||
+      !canUseAuthenticatedIndexer,
     variables: {
       request: {
         address: currentAccount?.address,
@@ -430,24 +435,66 @@ const Balances = () => {
     [assets]
   );
   const walletActivity = walletActivityQuery.data || [];
+  const requestOnchainAccess = async () => {
+    setOnchainAccessRequested(true);
+    await authenticateIndexer({ force: true });
+  };
 
   const renderOnchainWalletContent = () => {
+    if (!onchainAccessRequested) {
+      return (
+        <div className="mx-auto max-w-[42rem] px-4 py-8 md:px-6 md:py-10">
+          <div className="rounded-[1.5rem] border border-gray-200 border-dashed bg-gray-50 p-5 text-center dark:border-white/10 dark:bg-[#17181d]">
+            <p className="font-semibold text-base md:text-lg">
+              Load your onchain balances
+            </p>
+            <p className="mt-2 text-gray-500 text-sm dark:text-gray-400">
+              We&apos;ll ask for a secure wallet signature only when you choose
+              to unlock your onchain balances.
+            </p>
+            <Button
+              className="mt-4"
+              loading={authenticating}
+              onClick={() => {
+                void requestOnchainAccess();
+              }}
+              size="md"
+            >
+              Load onchain balances
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (authenticating && !canUseAuthenticatedIndexer) {
+      return <Loader className="my-16" />;
+    }
+
     if (loading) {
       return <Loader className="my-16" />;
     }
 
     if (needsAuthenticatedIndexer) {
-      return authenticating ? (
-        <Loader className="my-16" />
-      ) : (
-        <ErrorMessage
-          className="m-5"
-          error={{
-            message:
-              "Sign in again to finish wallet authentication and load your balances."
-          }}
-          title="Authentication required"
-        />
+      return (
+        <div className="m-5 space-y-3">
+          <ErrorMessage
+            error={{
+              message:
+                "Approve the secure wallet check to finish loading your onchain balances."
+            }}
+            title="Authentication required"
+          />
+          <Button
+            onClick={() => {
+              void requestOnchainAccess();
+            }}
+            outline
+            size="sm"
+          >
+            Try again
+          </Button>
+        </div>
       );
     }
 

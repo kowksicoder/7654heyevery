@@ -464,11 +464,67 @@ const callRpc = async <TData>(
   const { data, error } = await getSupabaseClient().rpc(fn, args);
 
   if (error) {
-    throw error;
+    const details = [error.message, error.details, error.hint, error.code]
+      .filter(Boolean)
+      .join(" | ");
+    const rpcError = new Error(
+      `Supabase RPC "${fn}" failed${details ? `: ${details}` : "."}`
+    );
+
+    Object.assign(rpcError, {
+      cause: error,
+      code: error.code,
+      details: error.details,
+      hint: error.hint
+    });
+
+    throw rpcError;
   }
 
   return data as TData;
 };
+
+const normalizeExploreListingTimestamp = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+const normalizeExploreListingValue = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+const normalizeExploreListingEvents = (items: Array<Record<string, unknown>>) =>
+  items
+    .map((item) => ({
+      coinAddress: normalizeExploreListingValue(item.coinAddress),
+      creatorAddress: normalizeExploreListingValue(item.creatorAddress),
+      imageUrl: normalizeExploreListingValue(item.imageUrl),
+      listedAt: normalizeExploreListingTimestamp(item.listedAt),
+      name: normalizeExploreListingValue(item.name),
+      source: normalizeExploreListingValue(item.source),
+      ticker: normalizeExploreListingValue(item.ticker)
+    }))
+    .filter(
+      (item) =>
+        Boolean(item.coinAddress) &&
+        /^0x[a-fA-F0-9]{40}$/.test(item.coinAddress || "")
+    );
 
 const parseResponseError = async (response: Response) => {
   try {
@@ -2113,7 +2169,7 @@ export const syncExploreListingEvents = async (
   items: Array<Record<string, unknown>>
 ) =>
   callRpc<number>("sync_explore_listing_events", {
-    input_items: items
+    input_items: normalizeExploreListingEvents(items)
   });
 
 export const listCoinChatMessages = async (input: {

@@ -331,6 +331,7 @@ const Swap = () => {
     identityWalletAddress,
     identityWalletClient,
     isLinkingExecutionWallet,
+    prepareExecutionWallet,
     smartWalletEnabled,
     smartWalletError,
     smartWalletLoading
@@ -388,6 +389,43 @@ const Swap = () => {
     smartWalletError,
     smartWalletLoading
   });
+  const ensureExecutionWalletReady = async () => {
+    const existingClient = toViemWalletClient(executionWalletClient);
+    const existingAddress =
+      executionWalletAddress && isAddress(executionWalletAddress)
+        ? (executionWalletAddress as Address)
+        : undefined;
+
+    if (existingClient?.account && existingAddress) {
+      return {
+        address: existingAddress,
+        client: existingClient
+      };
+    }
+
+    setStatusModal({
+      description: "This should only take a moment.",
+      title: "Preparing your Every1 wallet",
+      tone: "pending"
+    });
+
+    const preparedWallet = await prepareExecutionWallet();
+
+    if (
+      !preparedWallet.executionWalletClient?.account ||
+      !preparedWallet.executionWalletAddress
+    ) {
+      throw new Error(
+        executionWalletStatus.message ||
+          "Your Every1 wallet is not ready on Base yet."
+      );
+    }
+
+    return {
+      address: preparedWallet.executionWalletAddress as Address,
+      client: preparedWallet.executionWalletClient
+    };
+  };
   const publicClient = useMemo(
     () =>
       createPublicClient({
@@ -837,7 +875,6 @@ const Swap = () => {
     ? Boolean(
         activeCoin.address &&
           fiatWalletAddress &&
-          fiatWalletClient?.account &&
           profile?.id &&
           hasValidAmount &&
           hasSufficientBalance &&
@@ -846,8 +883,6 @@ const Swap = () => {
       )
     : Boolean(
         activeCoin.address &&
-          connectedTradeAddress &&
-          executionWalletStatus.isReady &&
           hasValidAmount &&
           receiveAmount > 0 &&
           hasSufficientBalance &&
@@ -858,18 +893,14 @@ const Swap = () => {
       ? fromIsEth
         ? "Confirm buy"
         : "Confirm sell"
-      : fiatWalletClient?.account
-        ? fiatQuoteLoading
-          ? "Getting quote..."
-          : fromIsEth
-            ? `Get ${activeCoin.symbol} quote`
-            : "Get Naira quote"
-        : "Preparing wallet..."
-    : executionWalletStatus.isReady
-      ? fromIsEth
-        ? `Swap to ${activeCoin.symbol}`
-        : "Swap to ETH"
-      : "Preparing wallet...";
+      : fiatQuoteLoading
+        ? "Getting quote..."
+        : fromIsEth
+          ? `Get ${activeCoin.symbol} quote`
+          : "Get Naira quote"
+    : fromIsEth
+      ? `Swap to ${activeCoin.symbol}`
+      : "Swap to ETH";
   const swapStatusNote = (
     isFiatRail
       ? fiatWalletAddress
@@ -890,7 +921,9 @@ const Swap = () => {
       : isFiatRail
         ? "Enter an amount to request a Naira trade quote."
         : "Enter an amount to get a live quote."
-    : executionWalletStatus.message || "Preparing your Every1 wallet to swap.";
+    : isFiatRail
+      ? "We'll verify your Every1 wallet when you request a quote."
+      : "We'll prepare your Every1 wallet when you continue.";
   const quoteExpiryText = fiatQuote
     ? `Valid until ${new Date(fiatQuote.expiresAt).toLocaleTimeString([], {
         hour: "numeric",
@@ -1105,19 +1138,18 @@ const Swap = () => {
               );
             }
 
-            await handleWrongNetwork({ chainId: base.id });
-            const client = toViemWalletClient(executionWalletClient);
+            const { client } = await ensureExecutionWalletReady();
+            const executionAccount = client.account;
 
-            if (!client?.account) {
-              throw new Error(
-                executionWalletStatus.message ||
-                  "Preparing your Every1 wallet on Base."
-              );
+            if (!executionAccount) {
+              throw new Error("Your Every1 wallet is not ready on Base yet.");
             }
+
+            await handleWrongNetwork({ chainId: base.id });
 
             const transferHash = await client.writeContract({
               abi: erc20Abi,
-              account: client.account,
+              account: executionAccount,
               address: activeCoin.address as Address,
               args: [settlement.address, BigInt(settlement.transferAmountRaw)],
               chain: base,
@@ -1562,32 +1594,12 @@ const Swap = () => {
       return;
     }
 
-    const senderAddress = connectedTradeAddress;
-
-    if (
-      !executionWalletStatus.isReady ||
-      !senderAddress ||
-      !isAddress(senderAddress)
-    ) {
-      toast.error(
-        executionWalletStatus.message || "Preparing your Every1 wallet on Base."
-      );
-      return;
-    }
-
     if (!hasSufficientBalance) {
       toast.error(
         fromIsEth
           ? "Not enough ETH balance for this swap"
           : `Not enough ${activeCoin.symbol} balance`
       );
-      return;
-    }
-
-    const initialParams = makeTradeParams(senderAddress);
-
-    if (!initialParams) {
-      toast.error("Enter a valid amount to swap");
       return;
     }
 
@@ -1599,19 +1611,9 @@ const Swap = () => {
         tone: "pending"
       });
 
+      const { address: clientSender, client } =
+        await ensureExecutionWalletReady();
       await handleWrongNetwork({ chainId: base.id });
-
-      const client = toViemWalletClient(executionWalletClient);
-      const clientSender = client?.account?.address || senderAddress;
-
-      if (!client || !isAddress(clientSender)) {
-        setStatusModal(null);
-        toast.error(
-          executionWalletStatus.message ||
-            "Preparing your Every1 wallet on Base."
-        );
-        return;
-      }
 
       const liveParams = makeTradeParams(clientSender);
 

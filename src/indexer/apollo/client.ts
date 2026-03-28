@@ -1,6 +1,7 @@
 import type { ApolloLink } from "@apollo/client";
 import { ApolloClient, from } from "@apollo/client";
 import cache from "./cache";
+import errorLink from "./errorLink";
 import httpLink from "./httpLink";
 import retryLink from "./retryLink";
 
@@ -11,8 +12,8 @@ export const createApolloClient = (authLink?: ApolloLink) =>
       enabled: true
     },
     link: authLink
-      ? from([authLink, retryLink, httpLink])
-      : from([retryLink, httpLink])
+      ? from([authLink, errorLink, retryLink, httpLink])
+      : from([errorLink, retryLink, httpLink])
   });
 
 const apolloClient = createApolloClient();

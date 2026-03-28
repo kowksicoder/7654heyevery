@@ -102,6 +102,7 @@ const Trade = ({
     identityWalletAddress,
     identityWalletClient,
     isLinkingExecutionWallet,
+    prepareExecutionWallet,
     smartWalletEnabled,
     smartWalletError,
     smartWalletLoading
@@ -148,6 +149,43 @@ const Trade = ({
     smartWalletError,
     smartWalletLoading
   });
+  const ensureExecutionWalletReady = async () => {
+    const existingClient = toViemWalletClient(executionWalletClient);
+    const existingAddress =
+      executionWalletAddress && isAddress(executionWalletAddress)
+        ? (executionWalletAddress as Address)
+        : undefined;
+
+    if (existingClient?.account && existingAddress) {
+      return {
+        address: existingAddress,
+        client: existingClient
+      };
+    }
+
+    setTradeStatusModal({
+      description: "This should only take a moment.",
+      title: "Preparing your Every1 wallet",
+      tone: "pending"
+    });
+
+    const preparedWallet = await prepareExecutionWallet();
+
+    if (
+      !preparedWallet.executionWalletClient?.account ||
+      !preparedWallet.executionWalletAddress
+    ) {
+      throw new Error(
+        executionWalletStatus.message ||
+          "Your Every1 wallet is not ready on Base yet."
+      );
+    }
+
+    return {
+      address: preparedWallet.executionWalletAddress as Address,
+      client: preparedWallet.executionWalletClient
+    };
+  };
 
   useEffect(() => {
     (async () => {
@@ -370,19 +408,18 @@ const Trade = ({
                 );
               }
 
-              await handleWrongNetwork({ chainId: base.id });
-              const client = toViemWalletClient(executionWalletClient);
+              const { client } = await ensureExecutionWalletReady();
+              const executionAccount = client.account;
 
-              if (!client?.account) {
-                throw new Error(
-                  executionWalletStatus.message ||
-                    "Preparing your Every1 wallet on Base."
-                );
+              if (!executionAccount) {
+                throw new Error("Your Every1 wallet is not ready on Base yet.");
               }
+
+              await handleWrongNetwork({ chainId: base.id });
 
               const transferHash = await client.writeContract({
                 abi: erc20Abi,
-                account: client.account,
+                account: executionAccount,
                 address: coin.address as Address,
                 args: [
                   settlement.address,
@@ -480,15 +517,6 @@ const Trade = ({
       return;
     }
 
-    if (!executionWalletStatus.isReady || !tradeWalletAddress) {
-      return toast.error(
-        executionWalletStatus.message || "Preparing your Every1 wallet on Base."
-      );
-    }
-
-    const params = makeParams(tradeWalletAddress);
-    if (!params) return;
-
     try {
       setLoading(true);
       setTradeStatusModal({
@@ -497,16 +525,11 @@ const Trade = ({
         tone: "pending"
       });
       umami.track("trade_creator_coin", { mode });
+      const { address: readyTradeWalletAddress, client } =
+        await ensureExecutionWalletReady();
       await handleWrongNetwork({ chainId: base.id });
-      const client = toViemWalletClient(executionWalletClient);
-      if (!client) {
-        setLoading(false);
-        setTradeStatusModal(null);
-        return toast.error(
-          executionWalletStatus.message ||
-            "Preparing your Every1 wallet on Base."
-        );
-      }
+      const params = makeParams(readyTradeWalletAddress);
+      if (!params) return;
 
       const receipt = await tradeCoin({
         account: client.account,
@@ -869,7 +892,9 @@ const Trade = ({
     fiatQuoteError ||
     fiatQuote?.summary ||
     (!fiatWalletClient?.account || !executionWalletStatus.isReady
-      ? executionWalletStatus.message || "Preparing your Every1 wallet."
+      ? isFiatRail
+        ? "We'll verify your Every1 wallet when you continue."
+        : "We'll prepare your Every1 wallet when you continue."
       : "");
   const submitLabel = loading
     ? mode === "buy"
@@ -884,32 +909,22 @@ const Trade = ({
         ? mode === "buy"
           ? "Confirm buy"
           : "Confirm sell"
-        : fiatWalletClient?.account
-          ? fiatQuoteLoading
-            ? "Getting quote..."
-            : "Get quote"
-          : "Preparing wallet..."
-      : executionWalletStatus.isReady
-        ? mode === "buy"
-          ? "Buy"
-          : "Sell"
-        : "Preparing wallet...";
+        : fiatQuoteLoading
+          ? "Getting quote..."
+          : "Get quote"
+      : mode === "buy"
+        ? "Buy"
+        : "Sell";
   const canSubmit = isFiatRail
     ? Boolean(
         profile?.id &&
           fiatWalletAddress &&
-          fiatWalletClient?.account &&
           hasValidAmount &&
           hasEnoughTokenToSell &&
           !loading &&
           !fiatQuoteLoading
       )
-    : Boolean(
-        amount &&
-          tradeWalletAddress &&
-          executionWalletStatus.isReady &&
-          !loading
-      );
+    : Boolean(amount && !loading);
 
   if (isMobileVariant) {
     const displayAmount = amount || "0";

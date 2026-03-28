@@ -10,7 +10,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { isAddress } from "viem";
 import Loader from "@/components/Shared/Loader";
-import { ErrorMessage, Modal } from "@/components/Shared/UI";
+import { Button, ErrorMessage, Modal } from "@/components/Shared/UI";
 import { getExecutionWalletStatus } from "@/helpers/executionWallet";
 import {
   getFiatWallet,
@@ -69,6 +69,7 @@ const FiatWalletPanel = () => {
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
+  const [walletAccessRequested, setWalletAccessRequested] = useState(false);
 
   const walletAddress = useMemo(() => {
     const candidate =
@@ -109,7 +110,7 @@ const FiatWalletPanel = () => {
   };
 
   const walletQuery = useQuery({
-    enabled: authReady,
+    enabled: authReady && walletAccessRequested,
     queryFn: async () =>
       await getFiatWallet({
         ...getAuthenticatedRequestContext()
@@ -118,7 +119,7 @@ const FiatWalletPanel = () => {
   });
 
   const transactionsQuery = useQuery({
-    enabled: authReady && showHistory,
+    enabled: authReady && walletAccessRequested && showHistory,
     queryFn: async () =>
       await getFiatWalletTransactions({
         limit: 8,
@@ -192,6 +193,9 @@ const FiatWalletPanel = () => {
   });
 
   const banks = walletQuery.data?.banks || [];
+  const requestWalletAccess = () => {
+    setWalletAccessRequested(true);
+  };
   const openDepositModal = () => {
     setDepositEmail(
       (currentValue) => currentValue || user?.email?.address || ""
@@ -244,68 +248,94 @@ const FiatWalletPanel = () => {
     <>
       <section className="mb-4 overflow-hidden rounded-[1.6rem] bg-[#090909] text-white md:border md:border-white/10 md:bg-[#111111]">
         <div className="px-3.5 py-4 md:px-5 md:py-5">
-          {authReady ? (
-            walletQuery.isLoading ? (
-              <Loader className="my-8" />
-            ) : walletQuery.error ? (
-              <ErrorMessage
-                className="mt-1"
-                error={walletQuery.error as { message?: string }}
-                title="Failed to load Naira wallet"
-              />
-            ) : walletQuery.data?.wallet ? (
-              <>
-                <div>
-                  <p className="text-[11px] text-white/56 uppercase tracking-[0.24em]">
-                    Naira balance
-                  </p>
-                  <p className="mt-2 font-semibold text-[3rem] leading-none tracking-tight md:text-[4rem]">
-                    {formatNaira(walletQuery.data.wallet.availableBalance)}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11px] text-white/72">
-                      Pending{" "}
-                      {formatNaira(walletQuery.data.wallet.pendingBalance)}
-                    </span>
-                    <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11px] text-white/72">
-                      Locked{" "}
-                      {formatNaira(walletQuery.data.wallet.lockedBalance)}
-                    </span>
+          {walletAccessRequested ? (
+            authReady ? (
+              walletQuery.isLoading ? (
+                <Loader className="my-8" />
+              ) : walletQuery.error ? (
+                <div className="space-y-3">
+                  <ErrorMessage
+                    className="mt-1"
+                    error={walletQuery.error as { message?: string }}
+                    title="Failed to load Naira wallet"
+                  />
+                  <Button
+                    onClick={() => {
+                      void walletQuery.refetch();
+                    }}
+                    outline
+                    size="sm"
+                  >
+                    Try again
+                  </Button>
+                </div>
+              ) : walletQuery.data?.wallet ? (
+                <>
+                  <div>
+                    <p className="text-[11px] text-white/56 uppercase tracking-[0.24em]">
+                      Naira balance
+                    </p>
+                    <p className="mt-2 font-semibold text-[3rem] leading-none tracking-tight md:text-[4rem]">
+                      {formatNaira(walletQuery.data.wallet.availableBalance)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11px] text-white/72">
+                        Pending{" "}
+                        {formatNaira(walletQuery.data.wallet.pendingBalance)}
+                      </span>
+                      <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11px] text-white/72">
+                        Locked{" "}
+                        {formatNaira(walletQuery.data.wallet.lockedBalance)}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <button
-                    className={actionPillClassName}
-                    onClick={openDepositModal}
-                    type="button"
-                  >
-                    <ArrowDownTrayIcon className="size-4" />
-                    Deposit
-                  </button>
-                  <button
-                    className={actionPillClassName}
-                    onClick={openWithdrawModal}
-                    type="button"
-                  >
-                    <ArrowUpRightIcon className="size-4" />
-                    Withdraw
-                  </button>
-                  <Link className={actionPillClassName} to="/swap">
-                    <ArrowsRightLeftIcon className="size-4" />
-                    Swap
-                  </Link>
-                </div>
-              </>
-            ) : null
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <button
+                      className={actionPillClassName}
+                      onClick={openDepositModal}
+                      type="button"
+                    >
+                      <ArrowDownTrayIcon className="size-4" />
+                      Deposit
+                    </button>
+                    <button
+                      className={actionPillClassName}
+                      onClick={openWithdrawModal}
+                      type="button"
+                    >
+                      <ArrowUpRightIcon className="size-4" />
+                      Withdraw
+                    </button>
+                    <Link className={actionPillClassName} to="/swap">
+                      <ArrowsRightLeftIcon className="size-4" />
+                      Swap
+                    </Link>
+                  </div>
+                </>
+              ) : null
+            ) : (
+              <div className="rounded-[1.2rem] border border-white/10 border-dashed px-4 py-4 text-sm text-white/68">
+                {walletStatus.message ||
+                  "Your Every1 wallet is getting ready. Please try again in a moment."}
+              </div>
+            )
           ) : (
             <div className="rounded-[1.2rem] border border-white/10 border-dashed px-4 py-4 text-sm text-white/68">
-              {walletStatus.message ||
-                "Preparing your Every1 wallet so we can load your Naira balance."}
+              <p className="font-semibold text-sm text-white">
+                Load your Naira wallet
+              </p>
+              <p className="mt-2 text-white/68">
+                We&apos;ll verify your Every1 wallet with one secure signature
+                when you choose to load your Naira balance.
+              </p>
+              <Button className="mt-4" onClick={requestWalletAccess} size="sm">
+                Load Naira wallet
+              </Button>
             </div>
           )}
 
-          {authReady && walletQuery.data?.wallet ? (
+          {walletAccessRequested && authReady && walletQuery.data?.wallet ? (
             <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-white/58">
               <span>
                 {banks.length

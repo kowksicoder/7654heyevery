@@ -1,5 +1,5 @@
 import { usePrivy } from "@privy-io/react-auth";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWalletClient } from "wagmi";
 import { hasPrivyConfig } from "@/helpers/privy";
 import {
@@ -9,14 +9,21 @@ import {
 import { useAccountStore } from "@/store/persisted/useAccountStore";
 import {
   clearAuthTokens,
+  hydrateAuthTokens,
   signIn,
   useAuthStore
 } from "@/store/persisted/useAuthStore";
 
-let authAttemptInFlight: null | Promise<void> = null;
+let authAttemptInFlight: null | Promise<boolean> = null;
 let authAttemptKeyInFlight: null | string = null;
 
-const useEnsureIndexerAuth = () => {
+interface UseEnsureIndexerAuthOptions {
+  enabled?: boolean;
+}
+
+const useEnsureIndexerAuth = ({
+  enabled = false
+}: UseEnsureIndexerAuthOptions = {}) => {
   const hasPrivy = hasPrivyConfig();
   const { authenticated, ready } = usePrivy();
   const { currentAccount } = useAccountStore();
@@ -37,6 +44,7 @@ const useEnsureIndexerAuth = () => {
   const authAttemptKey =
     accountAddress && ownerAddress ? `${accountAddress}:${ownerAddress}` : null;
   const shouldAuthenticate =
+    enabled &&
     hasPrivy &&
     ready &&
     authenticated &&
@@ -49,6 +57,135 @@ const useEnsureIndexerAuth = () => {
       failedAttemptKeyRef.current = null;
     }
   }, [accessToken, authAttemptKey]);
+
+  const authenticateIndexer = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      if (
+        !hasPrivy ||
+        !ready ||
+        !authenticated ||
+        !authAttemptKey ||
+        !accountAddress ||
+        !ownerAddress ||
+        !walletClient?.account
+      ) {
+        return false;
+      }
+
+      if (accessToken) {
+        return true;
+      }
+
+      if (force) {
+        failedAttemptKeyRef.current = null;
+      }
+
+      if (!force && failedAttemptKeyRef.current === authAttemptKey) {
+        return false;
+      }
+
+      if (authAttemptInFlight && authAttemptKeyInFlight === authAttemptKey) {
+        return await authAttemptInFlight;
+      }
+
+      const authenticateIndexerSession = async () => {
+        try {
+          setAuthenticating(true);
+
+          const { data: challengeData } = await challengeMutation({
+            variables: {
+              request: isDirectWalletAccount
+                ? {
+                    onboardingUser: {
+                      wallet: ownerAddress
+                    }
+                  }
+                : {
+                    accountOwner: {
+                      account: accountAddress,
+                      owner: ownerAddress
+                    }
+                  }
+            }
+          });
+
+          const challenge = challengeData?.challenge;
+
+          if (!challenge) {
+            throw new Error("Failed to create authentication challenge.");
+          }
+
+          const signature = await walletClient.signMessage({
+            account: walletClient.account,
+            message: challenge.text
+          });
+
+          const { data: authenticateData } = await authenticateMutation({
+            variables: {
+              request: {
+                id: challenge.id,
+                signature
+              }
+            }
+          });
+
+          const authResult = authenticateData?.authenticate;
+
+          if (!authResult || authResult.__typename !== "AuthenticationTokens") {
+            throw new Error(
+              authResult?.__typename === "ForbiddenError"
+                ? authResult.reason || "Authentication was rejected."
+                : "Failed to authenticate wallet session."
+            );
+          }
+
+          signIn({
+            accessToken: authResult.accessToken,
+            refreshToken: authResult.refreshToken
+          });
+          failedAttemptKeyRef.current = null;
+
+          return true;
+        } catch (error) {
+          failedAttemptKeyRef.current = authAttemptKey;
+          clearAuthTokens();
+          console.error("Failed to authenticate indexer session", error);
+          return false;
+        } finally {
+          setAuthenticating(false);
+        }
+      };
+
+      authAttemptKeyInFlight = authAttemptKey;
+      const nextAttempt = authenticateIndexerSession();
+      authAttemptInFlight = nextAttempt;
+
+      try {
+        return await nextAttempt;
+      } finally {
+        if (authAttemptInFlight === nextAttempt) {
+          authAttemptInFlight = null;
+        }
+
+        if (authAttemptKeyInFlight === authAttemptKey) {
+          authAttemptKeyInFlight = null;
+        }
+      }
+    },
+    [
+      accessToken,
+      accountAddress,
+      authAttemptKey,
+      authenticateMutation,
+      authenticated,
+      challengeMutation,
+      hasPrivy,
+      isDirectWalletAccount,
+      ownerAddress,
+      ready,
+      walletClient
+    ]
+  );
 
   useEffect(() => {
     if (
@@ -65,114 +202,21 @@ const useEnsureIndexerAuth = () => {
       return;
     }
 
-    let cancelled = false;
-
-    const authenticateIndexerSession = async () => {
-      try {
-        setAuthenticating(true);
-
-        const { data: challengeData } = await challengeMutation({
-          variables: {
-            request: isDirectWalletAccount
-              ? {
-                  onboardingUser: {
-                    wallet: ownerAddress
-                  }
-                }
-              : {
-                  accountOwner: {
-                    account: accountAddress,
-                    owner: ownerAddress
-                  }
-                }
-          }
-        });
-
-        const challenge = challengeData?.challenge;
-
-        if (!challenge) {
-          throw new Error("Failed to create authentication challenge.");
-        }
-
-        const signature = await walletClient.signMessage({
-          account: walletClient.account,
-          message: challenge.text
-        });
-
-        const { data: authenticateData } = await authenticateMutation({
-          variables: {
-            request: {
-              id: challenge.id,
-              signature
-            }
-          }
-        });
-
-        const authResult = authenticateData?.authenticate;
-
-        if (!authResult || authResult.__typename !== "AuthenticationTokens") {
-          throw new Error(
-            authResult?.__typename === "ForbiddenError"
-              ? authResult.reason || "Authentication was rejected."
-              : "Failed to authenticate wallet session."
-          );
-        }
-
-        signIn({
-          accessToken: authResult.accessToken,
-          refreshToken: authResult.refreshToken
-        });
-        failedAttemptKeyRef.current = null;
-      } catch (error) {
-        failedAttemptKeyRef.current = authAttemptKey;
-        clearAuthTokens();
-        console.error("Failed to authenticate indexer session", error);
-      }
-    };
-
-    setAuthenticating(true);
-
-    if (authAttemptInFlight && authAttemptKeyInFlight === authAttemptKey) {
-      void authAttemptInFlight.finally(() => {
-        if (!cancelled) {
-          setAuthenticating(false);
-        }
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    authAttemptKeyInFlight = authAttemptKey;
-    authAttemptInFlight = authenticateIndexerSession();
-
-    void authAttemptInFlight.finally(() => {
-      authAttemptInFlight = null;
-      authAttemptKeyInFlight = null;
-
-      if (!cancelled) {
-        setAuthenticating(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    void authenticateIndexer({ force: false });
   }, [
     accountAddress,
     authAttemptKey,
-    authenticateMutation,
-    challengeMutation,
-    isDirectWalletAccount,
-    ownerAddress,
+    authenticateIndexer,
     shouldAuthenticate,
     walletClient
   ]);
 
   return {
+    authenticateIndexer,
     authenticating,
-    canUseAuthenticatedIndexer: Boolean(accessToken),
+    canUseAuthenticatedIndexer: Boolean(
+      accessToken || hydrateAuthTokens().accessToken
+    ),
     needsAuthenticatedIndexer: Boolean(currentAccount?.address) && !accessToken
   };
 };
