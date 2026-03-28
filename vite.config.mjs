@@ -23,6 +23,9 @@ const referralRuntime = createReferralRuntime({ rootDir: __dirname });
 const verificationRuntime = createVerificationRuntime({ rootDir: __dirname });
 
 export default defineConfig({
+  optimizeDeps: {
+    include: ["buffer"]
+  },
   plugins: [
     tsconfigPaths(),
     react(),
@@ -98,5 +101,10 @@ export default defineConfig({
       name: "every1-browser-push"
     }
   ],
-  preview: { allowedHosts: true }
+  preview: { allowedHosts: true },
+  resolve: {
+    alias: {
+      buffer: "buffer/"
+    }
+  }
 });

@@ -1,15 +1,16 @@
 import "./font.css";
 import "./styles.css";
 
-// biome-ignore lint/style/useNodejsImportProtocol: the browser bundle needs the buffer package polyfill.
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import Providers from "@/components/Common/Providers";
 import Routes from "./routes";
 
+const browserBuffer = Buffer as unknown as typeof globalThis.Buffer;
+
 const analyticsGlobal = globalThis as typeof globalThis & {
-  Buffer?: typeof Buffer;
+  Buffer?: typeof globalThis.Buffer;
   global?: typeof globalThis;
   umami?: {
     track: (event: string, data?: Record<string, unknown>) => void;
@@ -17,7 +18,7 @@ const analyticsGlobal = globalThis as typeof globalThis & {
 };
 
 if (typeof analyticsGlobal.Buffer === "undefined") {
-  analyticsGlobal.Buffer = Buffer;
+  analyticsGlobal.Buffer = browserBuffer;
 }
 
 if (typeof analyticsGlobal.global === "undefined") {
